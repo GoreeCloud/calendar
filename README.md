@@ -16,14 +16,14 @@ The repository now includes:
 - deterministic month, week, day, and agenda view-window projections;
 - versioned first-party event-view and privacy-minimized busy-time API contracts;
 - a fail-closed CalDAV transport foundation with HTTPS-only configuration, cross-origin refusal, authenticated discovery, bounded calendar-query reads, ETag-protected writes/deletes, and iCalendar serialization;
-- a Glaze UI V1.4 / `1.4.0` application source target for the native Android line, pinned to current Stable authority while downstream application acceptance remains in progress;
+- a Glaze UI V1.4 / `1.5.1` application source target for the native Android line, pinned to current Stable authority while downstream application acceptance remains in progress;
 - a dedicated first-party Kotlin/Jetpack Compose Android Development client whose Radicale/CalDAV authority, GoreeCloud Identity prerequisite, read-contract boundary, optional Calendar Provider bridge, and blocked transport/synchronization states are documented independently;
 - the strict GoreeCloud Tasks projection consumer and bidirectional Tasks integration contract;
 - dependency-free unit/contract tests suitable for CI.
 
 The web/server source and the native Android Development client are distinct runtime surfaces over the same Calendar authority model. The Android client does not contact Radicale directly, copy browser cookies, or create a second authoritative event database. Its future network, offline, background-sync, mutation, and Calendar Provider capabilities remain separately gated.
 
-This is a source foundation, not production acceptance. Production publication, production DAV credentials, user migration, monitoring, backup/recovery evidence, live target-environment validation, GLAZE UI V1.4/V1.4.1 application acceptance, and production Android signing remain separate controlled work.
+This is a source foundation, not production acceptance. Production publication, production DAV credentials, user migration, monitoring, backup/recovery evidence, live target-environment validation, GLAZE UI V1.6 / 1.6.0 application acceptance, and production Android signing remain separate controlled work.
 
 ## CalDAV compatibility boundary
 
