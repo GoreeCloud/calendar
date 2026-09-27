@@ -12,7 +12,7 @@ Android's Calendar Provider is an optional device-integration bridge, not the Go
 
 - Kotlin/Jetpack Compose application module targeting SDK 36 with minimum SDK 29 and Java 17.
 - Launchable native Calendar Development surface.
-- Repository-local GLAZE UI V1.4.1 / `1.4.1` adoption boundary pinned to Stable authority `4fab9da0fad2e5c974e0e66ec88632c61745751c`, with V1.4.0 retained as the immediate rollback baseline and downstream conformance still `ADOPTION_IN_PROGRESS`.
+- Repository-local GLAZE UI V1.6 / `1.6.0` adoption boundary pinned to Stable authority `a7180679ea851389e0f3004515f9a25f420e716d`, with V1.5.1 retained as the immediate rollback baseline and downstream conformance still `ADOPTION_IN_PROGRESS`.
 - Explicit runtime capability state for Identity, CalDAV read/write, offline cache, background synchronization, and the Android Calendar Provider bridge.
 - A pure Kotlin read-contract model for the existing session-authorized `/api/v1/events` and `/api/v1/busy-time` endpoints.
 - Fail-closed request construction: calendar hrefs must be bounded, canonical server-relative identifiers; view modes are restricted to the server contract; busy-time windows use timezone-aware values with positive duration.
@@ -22,12 +22,13 @@ Android's Calendar Provider is an optional device-integration bridge, not the Go
 - Busy-response checks for exact requested range, count equality, positive clipped intervals, request-range containment, strict ordering, and non-overlap.
 - Native Identity/session exchange and network transport remain blocked. The manifest still requests neither `INTERNET` nor Calendar Provider permissions.
 - Android backup disabled.
+- Mandatory first-use setup now persists interruption/resume state, explains current Identity/CalDAV/network/Calendar Provider boundaries, enables contextual hints by default, and provides global hint disable/re-enable, dismissed-hint reset, and voluntary setup replay controls.
 - Unit coverage proving unavailable runtime capability is not advertised as accepted and source-ready request/response contracts cannot broaden origin/identity authority.
 - Gradle caching, parallel execution, and incremental Kotlin compilation.
 
 A source-ready endpoint or response contract is not a live CalDAV connection. The Android client has **no network authority** in this tranche: it does not copy browser cookies, embed reusable service credentials, invent bearer tokens, contact Radicale directly, or parse remote JSON.
 
-Shared GLAZE UI V1.4.1 qualification is not Calendar-local acceptance. Repository-local optical behavior, accessibility, representative-device behavior, performance, Human Visual Excellence, rollback, and release evidence remain separate fail-closed gates.
+Shared GLAZE UI V1.6 qualification is not Calendar-local acceptance. Repository-local optical behavior, accessibility, representative-device behavior, performance, Human Visual Excellence, rollback, and release evidence remain separate fail-closed gates.
 
 ## Calendar response acceptance boundary
 
@@ -58,7 +59,7 @@ A successful response decision means only that already-decoded Development data 
 7. Add protected bounded offline cache and deterministic reconciliation.
 8. Add WorkManager/background synchronization with power/network constraints.
 9. Add the optional Android Calendar Provider bridge with explicit permissions and user controls.
-10. Complete repository-local GLAZE UI V1.4.1 rendered, accessibility, form-factor, representative-device, performance, Human Visual Excellence, and rollback acceptance.
+10. Complete repository-local GLAZE UI V1.6 rendered, accessibility, form-factor, representative-device, performance, Human Visual Excellence, and rollback acceptance.
 11. Complete independent Privacy Shield, Wardveil Security, Everkeep, Manager, Mesh, Identity, Sync, signing/provenance, recovery, Release Candidate, production, and Stable gates.
 
 A successful source build or CI run is Development evidence only and does not grant production or platform-system acceptance.
