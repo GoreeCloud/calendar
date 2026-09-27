@@ -63,15 +63,15 @@ platform_systems:
 
   glaze_ui:
     result: applicable-migration-required
-    version: "1.4.1"
+    version: "1.6.0"
     evidence:
       - README.md
       - clients/android/README.md
       - clients/android/app/src/main/java/com/goreecloud/calendar/GlazeCalendarTheme.kt
       - clients/android/app/src/test/java/com/goreecloud/calendar/GlazeCalendarContractTest.kt
-      - scripts/validate_android_glaze_v1_4.py
-      - docs/glaze-ui-v1.4-android-adoption.md
-    notes: The Android Development client targets current Stable GLAZE UI V1.4.1 / 1.4.1 at authoritative Stable main revision 4fab9da0fad2e5c974e0e66ec88632c61745751c, with V1.4.0 retained as the immediate rollback baseline. Shared V1.4.1 qualification does not establish Calendar-local conformance. Optical Engine, Reduced Transparency, Increased Contrast, representative-device, accessibility, performance, Human Visual Excellence, rollback, release, and production acceptance remain explicitly unaccepted.
+      - scripts/validate_android_glaze_v1_6.py
+      - docs/glaze-ui-v1.6-android-adoption.md
+    notes: The Android Development client targets current Stable GLAZE UI V1.6 / 1.6.0 at authoritative Stable main revision a7180679ea851389e0f3004515f9a25f420e716d, with V1.5.1 retained as the immediate rollback baseline. Shared V1.6.0 qualification does not establish Calendar-local conformance. Optical Engine, Reduced Transparency, Increased Contrast, representative-device, accessibility, performance, Human Visual Excellence, rollback, release, and production acceptance remain explicitly unaccepted.
 
   mesh:
     result: applicable-blocked
@@ -133,10 +133,10 @@ external_dependencies:
 
 compatibility:
   platform_contract: "0.3"
-  glaze_ui_required: "1.4.1"
+  glaze_ui_required: "1.6.0"
   requires:
     - goreecloud-platform-contract==0.3
-    - glaze-ui==1.4.1
+    - glaze-ui==1.6.0
     - caldav
     - android-api>=29
   provides:
@@ -159,14 +159,14 @@ conformance:
     - clients/android/app/src/main/java/com/goreecloud/calendar/CalendarIdentityBinding.kt
     - clients/android/app/src/test/java/com/goreecloud/calendar/CalendarIdentityBindingTest.kt
     - clients/android/app/src/test/java/com/goreecloud/calendar/GlazeCalendarContractTest.kt
-    - scripts/validate_android_glaze_v1_4.py
-    - docs/glaze-ui-v1.4-android-adoption.md
+    - scripts/validate_android_glaze_v1_6.py
+    - docs/glaze-ui-v1.6-android-adoption.md
   blockers:
     - GoreeCloud Manager registration and operational acceptance are not established.
     - Privacy Shield runtime integration and production privacy acceptance are not established.
     - Wardveil Security runtime integration and production security acceptance are not established.
     - Everkeep backup, clean-target restore, recovery lineage, and production recovery acceptance are not established.
-    - GLAZE UI V1.4.1 source adoption is in progress; shared Stable qualification does not replace Calendar-local rendered, accessibility, adaptive/form-factor, representative-device, performance, Human Visual Excellence, rollback, release, and production acceptance.
+    - GLAZE UI V1.6 source adoption is in progress; shared Stable qualification does not replace Calendar-local rendered, accessibility, adaptive/form-factor, representative-device, performance, Human Visual Excellence, rollback, release, and production acceptance.
     - GoreeCloud Mesh registration, capability publication, event transport, and runtime acceptance are not established.
     - GoreeCloud Identity native registration, credential exchange, session runtime, protected credential storage, and production acceptance are not established.
     - GoreeCloud Sync change tracking, version/conflict reconciliation, authorized replication, offline-resume, and cross-device continuity acceptance are not established.
