@@ -7,12 +7,12 @@ import org.junit.Test
 class GlazeCalendarContractTest {
     @Test
     fun currentStableGlazeReferenceIsPinned() {
-        assertEquals("1.4.1", GlazeCalendarContract.VERSION)
+        assertEquals("1.6.0", GlazeCalendarContract.VERSION)
         assertEquals(
-            "4fab9da0fad2e5c974e0e66ec88632c61745751c",
+            "a7180679ea851389e0f3004515f9a25f420e716d",
             GlazeCalendarContract.REFERENCE_REVISION,
         )
-        assertEquals("1.4.0", GlazeCalendarContract.ROLLBACK_VERSION)
+        assertEquals("1.5.1", GlazeCalendarContract.ROLLBACK_VERSION)
         assertEquals("ADOPTION_IN_PROGRESS", GlazeCalendarContract.ADOPTION_STATE)
     }
 
