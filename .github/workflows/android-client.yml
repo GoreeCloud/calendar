@@ -5,14 +5,14 @@ on:
     branches: [main]
     paths:
       - 'clients/android/**'
-      - 'docs/glaze-ui-v1.4-android-adoption.md'
-      - 'scripts/validate_android_glaze_v1_4.py'
+      - 'docs/glaze-ui-v1.6-android-adoption.md'
+      - 'scripts/validate_android_glaze_v1_6.py'
       - '.github/workflows/android-client.yml'
   pull_request:
     paths:
       - 'clients/android/**'
-      - 'docs/glaze-ui-v1.4-android-adoption.md'
-      - 'scripts/validate_android_glaze_v1_4.py'
+      - 'docs/glaze-ui-v1.6-android-adoption.md'
+      - 'scripts/validate_android_glaze_v1_6.py'
       - '.github/workflows/android-client.yml'
 
 permissions:
@@ -33,9 +33,9 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.11.1'
-      - name: Validate GLAZE UI V1.4 adoption boundary
+      - name: Validate GLAZE UI V1.6 adoption boundary
         working-directory: .
-        run: python3 scripts/validate_android_glaze_v1_4.py
+        run: python3 scripts/validate_android_glaze_v1_6.py
       - name: Unit tests
         run: gradle :app:testDebugUnitTest --stacktrace
       - name: Assemble debug
