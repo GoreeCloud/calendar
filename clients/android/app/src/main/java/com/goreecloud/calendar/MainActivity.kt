@@ -14,15 +14,22 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 
@@ -32,14 +39,68 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         setContent {
             GlazeCalendarTheme {
-                CalendarDevelopmentShell(CalendarCapabilitySnapshot.developmentShell())
+                CalendarRoot(CalendarCapabilitySnapshot.developmentShell())
             }
         }
     }
 }
 
 @Composable
-private fun CalendarDevelopmentShell(capabilities: CalendarCapabilitySnapshot) {
+private fun CalendarRoot(capabilities: CalendarCapabilitySnapshot) {
+    val applicationContext = LocalContext.current.applicationContext
+    val repository = remember(applicationContext) {
+        CalendarGuidanceRepository(SharedPreferencesCalendarGuidanceStore(applicationContext))
+    }
+    var guidanceState by remember(repository) { mutableStateOf(repository.load()) }
+
+    if (!guidanceState.setupCompleted) {
+        CalendarFirstUseWizard(
+            state = guidanceState,
+            onPrevious = {
+                guidanceState = repository.previousSetupStep(guidanceState)
+            },
+            onNext = {
+                guidanceState = repository.nextSetupStep(guidanceState)
+            },
+            onHintsEnabledChanged = { enabled ->
+                guidanceState = repository.setHintsEnabled(guidanceState, enabled)
+            },
+            onComplete = {
+                guidanceState = repository.completeSetup(guidanceState)
+            },
+        )
+    } else {
+        CalendarDevelopmentShell(
+            capabilities = capabilities,
+            guidanceState = guidanceState,
+            onDismissGuidanceHint = {
+                guidanceState = repository.dismissHint(
+                    guidanceState,
+                    CALENDAR_AUTHORITY_HINT_ID,
+                )
+            },
+            onHintsEnabledChanged = { enabled ->
+                guidanceState = repository.setHintsEnabled(guidanceState, enabled)
+            },
+            onResetDismissedHints = {
+                guidanceState = repository.resetDismissedHints(guidanceState)
+            },
+            onReplaySetup = {
+                guidanceState = repository.replaySetup(guidanceState)
+            },
+        )
+    }
+}
+
+@Composable
+private fun CalendarDevelopmentShell(
+    capabilities: CalendarCapabilitySnapshot,
+    guidanceState: CalendarGuidanceState,
+    onDismissGuidanceHint: () -> Unit,
+    onHintsEnabledChanged: (Boolean) -> Unit,
+    onResetDismissedHints: () -> Unit,
+    onReplaySetup: () -> Unit,
+) {
     val acceptedCount = listOf(
         capabilities.identitySession,
         capabilities.calDavRead,
@@ -55,6 +116,7 @@ private fun CalendarDevelopmentShell(capabilities: CalendarCapabilitySnapshot) {
                 .fillMaxSize()
                 .statusBarsPadding()
                 .navigationBarsPadding()
+                .verticalScroll(rememberScrollState())
                 .padding(horizontal = 20.dp, vertical = 16.dp),
         ) {
             Text(
@@ -75,6 +137,11 @@ private fun CalendarDevelopmentShell(capabilities: CalendarCapabilitySnapshot) {
             )
 
             Spacer(Modifier.height(18.dp))
+            if (guidanceState.isHintVisible(CALENDAR_AUTHORITY_HINT_ID)) {
+                CalendarAuthorityHint(onDismiss = onDismissGuidanceHint)
+                Spacer(Modifier.height(18.dp))
+            }
+
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(20.dp),
@@ -116,6 +183,14 @@ private fun CalendarDevelopmentShell(capabilities: CalendarCapabilitySnapshot) {
                 text = "Radicale/CalDAV remains the authoritative calendar service. This Development shell intentionally requests no network or Calendar Provider permissions until synchronization and identity boundaries are implemented and independently accepted.",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+
+            Spacer(Modifier.height(22.dp))
+            CalendarGuidanceControls(
+                state = guidanceState,
+                onHintsEnabledChanged = onHintsEnabledChanged,
+                onResetDismissedHints = onResetDismissedHints,
+                onReplaySetup = onReplaySetup,
             )
         }
     }
