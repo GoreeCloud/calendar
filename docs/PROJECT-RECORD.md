@@ -13,7 +13,7 @@ Calendar was established as GoreeCloud's user-facing calendar application over a
 
 ## 2026-09-09 — Verified default-branch baseline
 
-At migration time, authoritative `main` is `e45c7fac63b4bc61d3ac4e34ef93716d9ca66ff0`.
+At that historical checkpoint, authoritative `main` was `11f8b499fb297d179a77af10d780325eeaebb78e`.
 
 The repository README describes a source foundation including timezone-safe event primitives, calendar-view projections, CalDAV transport behavior, first-party API contracts, a Glaze UI shell, Tasks integration contracts, and tests. The README explicitly states that production publication, production DAV credentials, user migration, monitoring, backup/recovery evidence, and live target-environment validation remain separate controlled work.
 
