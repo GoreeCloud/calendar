@@ -47,3 +47,11 @@ python -m unittest discover -s tests -v
 ## License
 
 GoreeCloud Calendar is licensed under the GNU Affero General Public License, version 3 only (`AGPL-3.0-only`). See `LICENSE`.
+
+
+## Project governance
+
+- [Project specifications](docs/PROJECT-SPECIFICATIONS.md) — authoritative project scope, requirements, data-authority boundaries, privacy/security requirements, and acceptance gates once this migration is accepted on `main`.
+- [Project record](docs/PROJECT-RECORD.md) — significant project history, candidate-stack context, governance transitions, and migration evidence.
+
+Repository-native feature state is maintained in `IMPLEMENTED-FEATURES.md`, `PLANNED-FEATURES.md`, and `CHANGELOGS.md`. The retired `FEATURE-ROADMAP.md` and its former Google Drive synchronization model must not be recreated as competing authority.
