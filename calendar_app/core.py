@@ -326,6 +326,7 @@ class CalendarHandler(BaseHTTPRequestHandler):
                 merged = {name: old[name] for name in
                           ("calendar_id", "title", "description", "location", "start_at", "end_at", "all_day")}
                 merged.update(payload)
+                merged["all_day"] = bool(merged["all_day"]) if type(merged["all_day"]) is int else merged["all_day"]
                 cid = _text(merged.get("calendar_id"), "calendar_id", 64, True)
                 self._owned_calendar(db, user, cid)
                 title, desc, location, start, end, all_day = _event_values(merged)
