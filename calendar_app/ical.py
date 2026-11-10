@@ -80,8 +80,8 @@ def _property(line: str):
     if ":" not in line:
         raise ImportErrorCalendar("Malformed iCalendar property")
     header, value = line.split(":", 1)
-    parts = header.upper().split(";")
-    name = parts[0]
+    parts = header.split(";")
+    name = parts[0].upper()
     if not re.fullmatch(r"[A-Z][A-Z0-9-]{0,60}", name):
         raise ImportErrorCalendar("Invalid iCalendar property name")
     params={}
@@ -89,6 +89,7 @@ def _property(line: str):
         if "=" not in item:
             raise ImportErrorCalendar("Malformed iCalendar parameter")
         key, val = item.split("=", 1)
+        key = key.upper()
         if not key or not val or key in params:
             raise ImportErrorCalendar("Malformed iCalendar parameter")
         params[key] = val.strip('"')
