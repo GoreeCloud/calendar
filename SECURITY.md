@@ -34,3 +34,7 @@ Perform appropriate GoreeShield privacy and Wardveil security reviews. Establish
 ## Preview UI and schema notes
 
 The browser uses only bundled same-origin scripts and CSS, with regression checks for unique DOM IDs, known selectors and local assets. These static checks are not interactive accessibility audits or penetration tests. The P1–P4 task priority migration adds a SQLite column with a normal default and preserves existing records; operators should still take a verified snapshot before upgrades. Calendar deletion is deliberately owner-only and irreversible without an external backup.
+
+## Data portability boundary
+
+The owner-only `/api/v1/export.json` endpoint deliberately excludes password hashes, sessions, other user accounts, calendar membership directories and calendars only shared by others. It returns sensitive event/task content as plaintext to the authenticated browser after explicit user action. The downloaded file is outside server retention and protection controls; operators and users should secure it appropriately. This is not a production GDPR compliance claim or an encrypted backup.

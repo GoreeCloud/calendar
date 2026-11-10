@@ -27,6 +27,7 @@ Use Authorization: Bearer TOKEN on every /api/v1 route except /login. JSON bodie
 | GET | /api/v1/availability?calendar_id={id}&start={iso}&end={iso} | Authenticated merged busy intervals (all sharing roles) |
 | POST | /api/v1/import.ics | Import supported iCalendar events |
 | GET | /api/v1/export.ics?calendar_id={id} | Export an accessible calendar |
+| GET | /api/v1/export.json | Export all calendars owned by the current user as a bounded JSON dataset |
 
 Calendar roles: owner (calendar and membership control), edit (change events/tasks), read (view full event/task details and ICS export) and freebusy (view occupied timestamps only). Freebusy responses are redacted: no event IDs, titles, descriptions, locations, reminders, recurrence rules, task data or searchable details; calendar descriptions and owner metadata are not returned. Freebusy members cannot export private ICS, import, or edit. Sharing is local-account-only. Unauthorized calendar IDs are not disclosed.
 
@@ -69,3 +70,7 @@ The optional `tzid` parameter is a server-recognized IANA timezone (for example,
 ## Private meeting-time suggestions
 
 GET `/api/v1/suggestions` accepts 1–5 distinct comma-separated `calendar_ids`, required timezone-aware `start` and `end` (maximum seven days), an optional IANA `tzid` (UTC by default), and optional `duration_minutes` (15–240 in 15-minute increments; 30 by default). Every calendar must be authorized to the requesting user, including free/busy-only roles. It returns up to 20 candidate half-open intervals within 09:00–17:00 **local** time, excluding busy intervals, skipped recurrence instances and all-day blocked dates. It returns no event identifiers or content. This is not a booking transaction, tentative hold, invitation, resource allocator, or guarantee against subsequent updates. The browser suggests times across the selected and currently visible calendars (maximum five).
+
+## Private owner data export
+
+GET `/api/v1/export.json` returns `goreecloud-calendar-data` schema version 1 with the signed-in user's **owned** calendars (metadata, event fields, recurrence rules, excluded occurrences, reminders and tasks including priority). Shared calendars not owned by the user are deliberately omitted, even when the user can read their event details. Password hashes, salts, authentication sessions, other users, membership lists and private shared-account calendars are excluded. Export is limited to 200 calendars, 5,000 combined event/task records and 5 MiB response size; oversized exports return HTTP 413. The browser offers a local plaintext JSON download after explicit confirmation. **This is a portability snapshot, not a verified restore/import mechanism, retention guarantee or encryption layer.** The file must be protected by its holder.

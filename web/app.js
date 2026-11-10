@@ -708,6 +708,22 @@ $("import-file").addEventListener("change",async ()=>{
     await refresh();toast("Imported "+result.imported+" event(s); skipped "+result.skipped+" duplicate(s).");
   }catch(error){toast(error.message);}
 });
+$("export-my-data").addEventListener("click",async()=>{
+  if(!confirm("Export all calendars and tasks you own as a plaintext JSON file? Store this sensitive file securely."))return;
+  const button=$("export-my-data");button.disabled=true;
+  try{
+    const payload=await api("/export.json");
+    const json=JSON.stringify(payload,null,2);
+    const file=new Blob([json],{type:"application/json;charset=utf-8"});
+    const url=URL.createObjectURL(file);
+    const anchor=el("a");
+    anchor.href=url;anchor.download="goreecloud-calendar-private-"+dateKey(new Date())+".json";
+    document.body.append(anchor);anchor.click();anchor.remove();
+    URL.revokeObjectURL(url);
+    toast("Personal export created. Protect the downloaded file.");
+  }catch(error){toast(error.message);}
+  finally{button.disabled=false;}
+});
 $("export-btn").addEventListener("click",exportCalendar);
 window.addEventListener("online",()=>{if(state.token)refresh();});
 start();

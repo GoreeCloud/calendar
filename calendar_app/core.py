@@ -423,6 +423,13 @@ class CalendarHandler(BaseHTTPRequestHandler):
                 db.execute("DELETE FROM sessions WHERE user_id=?",(user,))
                 db.commit()
                 return self._send(200,{"ok":True,"signed_out":True})
+            if path == "/api/v1/export.json" and method == "GET":
+                from .portability import export_owned_data,ExportLimitError
+                try:
+                    data=export_owned_data(db,user,now())
+                except ExportLimitError as error:
+                    raise Failure(413,str(error)) from None
+                return self._send(200,data)
             if path == "/api/v1/calendars":
                 if method == "GET":
                     rows = db.execute("SELECT c.*, CASE WHEN c.owner_id=? THEN 'owner' "

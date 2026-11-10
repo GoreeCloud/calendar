@@ -620,6 +620,44 @@ class CalendarAPITests(unittest.TestCase):
         self.assertEqual(self.request("GET",base.replace(
             "2026-03-10T05:00:00Z","2026-04-10T05:00:00Z"),self.owner)[0],400)
 
+    def test_owner_only_portability_export_preserves_data_without_secrets(self):
+        cid=self.calendar(self.owner)
+        status,created=self.request("POST","/api/v1/events",self.owner,{
+            "calendar_id":cid,"title":"Private planning notes",
+            "description":"Keep sensitive data private",
+            "start_at":"2026-11-10T15:00:00Z","end_at":"2026-11-10T16:00:00Z",
+            "reminder_minutes":15,
+            "recurrence":{"freq":"DAILY","interval":1,"count":3,"tzid":None}})
+        self.assertEqual(status,201,created)
+        eid=created["id"]
+        self.assertEqual(self.request("POST","/api/v1/events/"+eid+"/exclusions",
+            self.owner,{"occurrence_start_at":"2026-11-11T15:00:00Z","version":1})[0],200)
+        self.assertEqual(self.request("POST","/api/v1/tasks",self.owner,{
+            "calendar_id":cid,"title":"Private task","priority":1})[0],201)
+        self.assertEqual(self.request("POST","/api/v1/calendars/"+cid+"/members",self.owner,{
+            "email":"other@example.test","role":"read"})[0],200)
+        status,exported=self.request("GET","/api/v1/export.json",self.owner)
+        self.assertEqual(status,200,exported)
+        self.assertEqual((exported["format"],exported["version"]),
+                         ("goreecloud-calendar-data",1))
+        personal=next(c for c in exported["calendars"] if c["id"]==cid)
+        self.assertEqual(personal["events"][0]["title"],"Private planning notes")
+        self.assertEqual(personal["events"][0]["reminder_minutes"],15)
+        self.assertEqual(personal["events"][0]["recurrence"]["freq"],"DAILY")
+        self.assertEqual(personal["events"][0]["excluded_occurrences"],
+                         ["2026-11-11T15:00:00Z"])
+        self.assertEqual(personal["tasks"][0]["priority"],1)
+        self.assertNotIn("owner_id",personal)
+        serial=json.dumps(exported)
+        for secret in ("very-long-owner-password","password_hash","token_hash","salt",
+                       "calendar_members","other@example.test"):
+            self.assertNotIn(secret,serial)
+        other=self.request("GET","/api/v1/export.json",self.other)
+        self.assertEqual(other[0],200)
+        self.assertFalse(any(c["id"]==cid for c in other[1]["calendars"]))
+        self.assertNotIn("Private planning notes",json.dumps(other[1]))
+        self.assertEqual(self.request("GET","/api/v1/export.json")[0],401)
+
     def test_logout_and_security_headers(self):
         self.assertEqual(self.request("GET","/api/v1/calendars")[0],401)
         self.assertEqual(self.request("POST","/api/v1/register",body={})[0],401)
