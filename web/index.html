@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#131d37">
+  <title>GoreeCloud Calendar</title>
+  <link rel="stylesheet" href="/styles.css">
+  <script src="/app.js" defer></script>
+</head>
+<body>
+  <main id="auth-screen" class="auth-page">
+    <div class="auth-art" aria-hidden="true"><div class="orb orb-a"></div><div class="orb orb-b"></div><div class="orbit">◷</div></div>
+    <section class="auth-card surface" aria-labelledby="auth-title">
+      <span class="eyebrow">YOUR TIME. YOUR CLOUD.</span>
+      <div class="brand brand-auth"><span class="brand-mark">◷</span> GoreeCloud <strong>Calendar</strong></div>
+      <h1 id="auth-title">Make room for what matters.</h1>
+      <p class="muted">A personal calendar that lives on your server. Sign in to your private workspace.</p>
+      <form id="login-form">
+        <label for="login-email">Email address</label>
+        <input id="login-email" type="email" name="email" autocomplete="username" required autofocus placeholder="you@example.com">
+        <label for="login-password">Password</label>
+        <input id="login-password" type="password" name="password" autocomplete="current-password" required>
+        <p id="login-error" class="error" role="alert"></p>
+        <button class="primary full" type="submit">Sign in <span aria-hidden="true">↗</span></button>
+      </form>
+      <p class="auth-note">Your administrator creates accounts locally on the self-hosted server.</p>
+    </section>
+  </main>
+
+  <div id="app-shell" class="app-shell" hidden>
+    <aside class="sidebar" aria-label="Calendar sidebar">
+      <div class="brand"><span class="brand-mark">◷</span><span>GoreeCloud<br><strong>Calendar</strong></span></div>
+      <button class="primary create-btn" id="new-event">＋ &nbsp; New event</button>
+      <div class="sidebar-label">WORKSPACE</div>
+      <nav id="desktop-nav" aria-label="Main navigation">
+        <button class="nav-item active" data-view="month"><span aria-hidden="true">▦</span> Month</button>
+        <button class="nav-item" data-view="week"><span aria-hidden="true">▤</span> Week</button>
+        <button class="nav-item" data-view="agenda"><span aria-hidden="true">☷</span> Agenda</button>
+        <button class="nav-item" data-view="tasks"><span aria-hidden="true">✓</span> Tasks</button>
+      </nav>
+      <div class="calendar-heading"><span class="sidebar-label">MY CALENDARS</span><button class="icon-btn small" id="new-calendar" title="Create calendar" aria-label="Create calendar">＋</button></div>
+      <div id="calendar-list" class="calendar-list" aria-label="Visible calendars"></div>
+      <div class="sidebar-bottom">
+        <div class="privacy-note"><span aria-hidden="true">◈</span> Private by design <small>Your calendars stay on your server.</small></div>
+        <div class="account"><span class="avatar" id="avatar">G</span><div><span id="account-email"></span><small>Self-hosted workspace</small></div><button id="sign-out" class="icon-btn" title="Sign out" aria-label="Sign out">↪</button></div>
+      </div>
+    </aside>
+
+    <div class="workspace">
+      <header class="topbar">
+        <div class="headline"><p class="eyebrow">YOUR SCHEDULE</p><h1 id="period-title">Calendar</h1></div>
+        <div class="top-actions"><span id="sync-state" class="sync-status" role="status">● Connected</span><button id="today-btn" class="secondary">Today</button><div class="stepper"><button id="prev-btn" aria-label="Previous period">‹</button><button id="next-btn" aria-label="Next period">›</button></div></div>
+      </header>
+      <div class="toolbar"><div class="toolbar-caption" id="toolbar-caption">Your time, organized.</div><div class="toolbar-actions"><button id="export-btn" class="secondary">↓ Export calendar</button><button class="primary small-primary" id="toolbar-create">＋ Event</button></div></div>
+      <main id="main-view" tabindex="-1" aria-live="polite"><div class="skeleton" aria-hidden="true"></div></main>
+    </div>
+    <nav id="mobile-nav" class="mobile-dock" aria-label="Mobile navigation">
+      <button data-view="month" class="active">▦<span>Month</span></button>
+      <button data-view="week">▤<span>Week</span></button>
+      <button data-view="agenda">☷<span>Agenda</span></button>
+      <button data-view="tasks">✓<span>Tasks</span></button>
+      <button id="mobile-create">＋<span>New</span></button>
+    </nav>
+  </div>
+  <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+
+  <dialog id="event-dialog" class="editor-dialog">
+    <form id="event-form">
+      <div class="dialog-heading"><div><span class="eyebrow">SCHEDULE</span><h2 id="event-dialog-title">New event</h2></div><button type="button" class="icon-btn" data-close="event-dialog" aria-label="Close">✕</button></div>
+      <label for="event-title">Event name</label><input id="event-title" maxlength="160" required placeholder="What's on your calendar?">
+      <div class="two-fields"><div><label for="event-start">Starts</label><input id="event-start" type="datetime-local" required></div><div><label for="event-end">Ends</label><input id="event-end" type="datetime-local" required></div></div>
+      <label for="event-calendar">Calendar</label><select id="event-calendar" required></select>
+      <label for="event-location">Location</label><input id="event-location" maxlength="500" placeholder="Add a location">
+      <label for="event-description">Details</label><textarea id="event-description" maxlength="4000" rows="3" placeholder="Add a note"></textarea>
+      <div class="dialog-actions"><button type="button" id="event-delete" class="danger" hidden>Delete event</button><span class="flex-spacer"></span><button type="button" class="secondary" data-close="event-dialog">Cancel</button><button class="primary" type="submit">Save event</button></div>
+    </form>
+  </dialog>
+  <dialog id="calendar-dialog" class="editor-dialog">
+    <form id="calendar-form">
+      <div class="dialog-heading"><div><span class="eyebrow">WORKSPACE</span><h2>Create calendar</h2></div><button type="button" class="icon-btn" data-close="calendar-dialog" aria-label="Close">✕</button></div>
+      <label for="calendar-name">Calendar name</label><input id="calendar-name" maxlength="100" required placeholder="Family, projects, travel…">
+      <label for="calendar-color">Calendar color</label><input id="calendar-color" type="color" value="#6475de">
+      <div class="dialog-actions"><button class="secondary" type="button" data-close="calendar-dialog">Cancel</button><button class="primary" type="submit">Create calendar</button></div>
+    </form>
+  </dialog>
+  <dialog id="task-dialog" class="editor-dialog">
+    <form id="task-form">
+      <div class="dialog-heading"><div><span class="eyebrow">TO-DO</span><h2>New task</h2></div><button type="button" class="icon-btn" data-close="task-dialog" aria-label="Close">✕</button></div>
+      <label for="task-title">Task</label><input id="task-title" maxlength="160" required placeholder="What needs doing?">
+      <label for="task-calendar">Calendar</label><select id="task-calendar" required></select>
+      <label for="task-due">Due date (optional)</label><input id="task-due" type="datetime-local">
+      <div class="dialog-actions"><button class="secondary" type="button" data-close="task-dialog">Cancel</button><button class="primary" type="submit">Add task</button></div>
+    </form>
+  </dialog>
+</body>
+</html>
