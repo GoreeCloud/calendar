@@ -4,7 +4,7 @@ const $ = id => document.getElementById(id);
 const state = {
   token: sessionStorage.getItem("gc-calendar-token"),
   calendars: [], events: [], tasks: [], view: "month",
-  anchor: new Date(), hidden: new Set(), editing: null, editingTask: null, editingCalendar: null, sharingCalendar: null, loading: false
+  anchor: new Date(), hidden: new Set(), editing: null, editingTask: null, taskFilter: "open", editingCalendar: null, sharingCalendar: null, loading: false
 };
 const byDay = d => new Date(d.getFullYear(),d.getMonth(),d.getDate());
 const addDays = (d,n) => {const v=byDay(d);v.setDate(v.getDate()+n);return v;};
@@ -198,15 +198,37 @@ function renderAgenda(){
 function emptyView(title,detail){const box=el("div","empty");box.append(el("span","empty-symbol","◷"),el("h2",null,title),el("p",null,detail));return box;}
 function renderTasks(){
   const root=el("section","task-board"),head=el("div","task-header");head.append(el("h2",null,"Your to-dos"));
-  const add=el("button","primary","＋ Add task");add.addEventListener("click",()=>openTask());head.append(add);root.append(head);
-  if(!state.tasks.length)root.append(emptyView("A clear to-do list","Create a task when inspiration strikes."));
+  const filter=el("select","task-filter");
+  filter.setAttribute("aria-label","Filter tasks");
+  [["open","To do"],["all","All tasks"],["today","Due today"],["overdue","Overdue"],["completed","Completed"]].forEach(([value,label])=>{
+    const option=el("option",null,label);option.value=value;filter.append(option);
+  });
+  filter.value=state.taskFilter;
+  filter.addEventListener("change",()=>{state.taskFilter=filter.value;renderTasks();});
+  const add=el("button","primary","＋ Add task");add.addEventListener("click",()=>openTask());
+  head.append(filter,add);root.append(head);
+  const todayStart=byDay(new Date()).getTime(),tomorrow=addDays(new Date(),1).getTime();
+  const selected=state.tasks.filter(task=>{
+    if(state.hidden.has(task.calendar_id))return false;
+    const due=task.due_at?Date.parse(task.due_at):NaN;
+    if(state.taskFilter==="open")return !task.done;
+    if(state.taskFilter==="completed")return Boolean(task.done);
+    if(state.taskFilter==="today")return !task.done&&due>=todayStart&&due<tomorrow;
+    if(state.taskFilter==="overdue")return !task.done&&due<todayStart;
+    return true;
+  }).sort((a,b)=>Number(a.done)-Number(b.done)||(a.priority??3)-(b.priority??3)||
+      String(a.due_at||"9999").localeCompare(String(b.due_at||"9999")));
+  if(!selected.length)root.append(emptyView("No matching tasks","Try another filter or add a task."));
   const ul=el("ul","task-list");
-  state.tasks.filter(t=>!state.hidden.has(t.calendar_id)).forEach(t=>{
+  selected.forEach(t=>{
     const row=el("li","task-row"),check=el("input");
     check.type="checkbox";check.checked=!!t.done;check.disabled=!canEdit(t.calendar_id);
     check.setAttribute("aria-label","Complete "+t.title);
     check.addEventListener("change",async()=>{try{await api("/tasks/"+t.id,{method:"PATCH",body:{done:check.checked}});await refresh();}catch(error){check.checked=!check.checked;toast(error.message);}});
     const name=el("span","task-text"+(t.done?" completed":""),t.title);
+    const tier=t.priority??3;
+    const priorityText=["","P1 · Urgent","P2 · High","P3 · Normal","P4 · Low"][tier]||"P3 · Normal";
+    name.append(el("small","task-priority-marker priority-"+tier,priorityText));
     if(t.due_at)name.append(el("small",null,"Due "+new Date(t.due_at).toLocaleString()));
     const del=el("button",null,"Delete");del.setAttribute("aria-label","Delete "+t.title);
     del.addEventListener("click",async()=>{if(!confirm("Delete this task?"))return;try{await api("/tasks/"+t.id,{method:"DELETE"});await refresh();}catch(error){toast(error.message);}});
@@ -264,6 +286,7 @@ function openTask(task=null){
   $("task-save").textContent=task?"Save task":"Add task";
   $("task-title").value=task?.title||"";
   $("task-due").value=task?.due_at?localField(new Date(task.due_at)):"";
+  $("task-priority").value=String(task?.priority??3);
   $("task-calendar").value=task?.calendar_id||state.calendars.find(c=>canEdit(c.id))?.id||"";
   $("task-calendar").disabled=Boolean(task);
   $("task-dialog").showModal();$("task-title").focus();
@@ -398,11 +421,12 @@ $("task-form").addEventListener("submit",async e=>{
   e.preventDefault();
   const title=$("task-title").value;
   const due_at=$("task-due").value?new Date($("task-due").value).toISOString():null;
+  const priority=Number($("task-priority").value);
   try{
     if(state.editingTask){
-      await api("/tasks/"+state.editingTask.id,{method:"PATCH",body:{title,due_at}});
+      await api("/tasks/"+state.editingTask.id,{method:"PATCH",body:{title,due_at,priority}});
     }else{
-      await api("/tasks",{method:"POST",body:{title,due_at,calendar_id:$("task-calendar").value}});
+      await api("/tasks",{method:"POST",body:{title,due_at,priority,calendar_id:$("task-calendar").value}});
     }
     $("task-dialog").close();await refresh();toast("Task saved.");
   }catch(error){toast(error.message);}

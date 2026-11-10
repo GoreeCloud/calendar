@@ -473,6 +473,28 @@ class CalendarAPITests(unittest.TestCase):
         window="?start=2026-11-10T00:00:00Z&end=2026-11-12T00:00:00Z"
         self.assertEqual(self.request("GET","/api/v1/events"+window,self.owner)[1]["events"],[])
 
+    def test_task_priorities_default_update_and_access(self):
+        cid=self.calendar(self.owner)
+        status,normal=self.request("POST","/api/v1/tasks",self.owner,{
+            "calendar_id":cid,"title":"Normal task"})
+        self.assertEqual(status,201,normal)
+        status,urgent=self.request("POST","/api/v1/tasks",self.owner,{
+            "calendar_id":cid,"title":"Urgent task","priority":1})
+        self.assertEqual(status,201,urgent)
+        tasks=self.request("GET","/api/v1/tasks",self.owner)[1]["tasks"]
+        self.assertEqual({t["title"]:t["priority"] for t in tasks},
+                         {"Normal task":3,"Urgent task":1})
+        self.assertEqual(self.request("POST","/api/v1/tasks",self.owner,{
+            "calendar_id":cid,"title":"Invalid","priority":True})[0],400)
+        self.assertEqual(self.request("POST","/api/v1/tasks",self.owner,{
+            "calendar_id":cid,"title":"Invalid","priority":5})[0],400)
+        self.assertEqual(self.request("PATCH","/api/v1/tasks/"+urgent["id"],self.owner,
+                         {"priority":4})[0],200)
+        self.assertEqual(self.request("PATCH","/api/v1/tasks/"+urgent["id"],self.other,
+                         {"priority":1})[0],404)
+        result=self.request("GET","/api/v1/tasks",self.owner)[1]["tasks"]
+        self.assertEqual(next(t["priority"] for t in result if t["id"]==urgent["id"]),4)
+
     def test_logout_and_security_headers(self):
         self.assertEqual(self.request("GET","/api/v1/calendars")[0],401)
         self.assertEqual(self.request("POST","/api/v1/register",body={})[0],401)

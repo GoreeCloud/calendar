@@ -167,6 +167,13 @@
       <label for="task-title">Task</label><input id="task-title" maxlength="160" required placeholder="What needs doing?">
       <label for="task-calendar">Calendar</label><select id="task-calendar" required></select>
       <label for="task-due">Due date (optional)</label><input id="task-due" type="datetime-local">
+      <label for="task-priority">Priority</label>
+      <select id="task-priority">
+        <option value="1">P1 · Urgent</option>
+        <option value="2">P2 · High</option>
+        <option value="3" selected>P3 · Normal</option>
+        <option value="4">P4 · Low</option>
+      </select>
       <div class="dialog-actions"><button class="secondary" type="button" data-close="task-dialog">Cancel</button><button class="primary" id="task-save" type="submit">Add task</button></div>
     </form>
   </dialog>

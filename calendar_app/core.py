@@ -75,7 +75,8 @@ CREATE TABLE IF NOT EXISTS imported_uids (
 CREATE TABLE IF NOT EXISTS tasks (
   id TEXT PRIMARY KEY, calendar_id TEXT NOT NULL REFERENCES calendars(id) ON DELETE CASCADE,
   title TEXT NOT NULL, due_at TEXT, done INTEGER NOT NULL DEFAULT 0,
-  created_at TEXT NOT NULL, updated_at TEXT NOT NULL
+  created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
+  priority INTEGER NOT NULL DEFAULT 3 CHECK(priority BETWEEN 1 AND 4)
 );
 CREATE INDEX IF NOT EXISTS idx_tasks_calendar ON tasks(calendar_id);
 """
@@ -119,6 +120,11 @@ def init_database(path: str) -> None:
             connection.execute("CREATE INDEX IF NOT EXISTS idx_calendar_members_user "
                                "ON calendar_members(user_id)")
             connection.commit()
+        # Add priority in place so existing tasks keep their due dates and IDs.
+        task_columns={r["name"] for r in connection.execute("PRAGMA table_info(tasks)")}
+        if "priority" not in task_columns:
+            connection.execute("ALTER TABLE tasks ADD COLUMN priority "
+                               "INTEGER NOT NULL DEFAULT 3 CHECK(priority BETWEEN 1 AND 4)")
         connection.execute("PRAGMA journal_mode=WAL")
 
 def digest_password(password: str, salt: str) -> str:
@@ -178,6 +184,11 @@ def _event_values(payload: dict) -> tuple:
         if not start.endswith("T00:00:00Z") or not end.endswith("T00:00:00Z"):
             raise Failure(400, "All-day events require UTC midnight boundaries")
     return title, description, location, start, end, int(payload.get("all_day", False))
+
+def _priority(value: object) -> int:
+    if type(value) is not int or not 1<=value<=4:
+        raise Failure(400,"Task priority must be an integer from 1 to 4")
+    return value
 
 def _reminder_minutes(value: object):
     if value is None:
@@ -668,15 +679,18 @@ class CalendarHandler(BaseHTTPRequestHandler):
                     return self._send(200, {"tasks": [dict(r) for r in rows]})
                 if method == "POST":
                     body = self._body()
-                    if not set(body) <= {"calendar_id", "title", "due_at"}:
+                    if not set(body) <= {"calendar_id", "title", "due_at", "priority"}:
                         raise Failure(400, "Unknown task fields")
                     cid = _text(body.get("calendar_id"), "calendar_id", 64, True)
                     self._accessible_calendar(db, user, cid, write=True)
                     title = _text(body.get("title"), "title", 160, True)
                     due = _stamp(body["due_at"]) if body.get("due_at") else None
+                    priority = _priority(body.get("priority",3))
                     tid = uuid.uuid4().hex
-                    db.execute("INSERT INTO tasks VALUES(?,?,?,?,?,?,?)",
-                               (tid,cid,title,due,0,now(),now()))
+                    db.execute("INSERT INTO tasks "
+                               "(id,calendar_id,title,due_at,done,created_at,updated_at,priority) "
+                               "VALUES(?,?,?,?,?,?,?,?)",
+                               (tid,cid,title,due,0,now(),now(),priority))
                     db.commit()
                     return self._send(201, {"id":tid})
             if path.startswith("/api/v1/tasks/") and method in ("PATCH", "DELETE"):
@@ -687,7 +701,7 @@ class CalendarHandler(BaseHTTPRequestHandler):
                     db.commit()
                     return self._send(200, {"ok": True})
                 body = self._body()
-                if not body or not set(body) <= {"title", "done", "due_at"}:
+                if not body or not set(body) <= {"title", "done", "due_at", "priority"}:
                     raise Failure(400, "Unknown task fields")
                 title = _text(body.get("title",old["title"]), "title", 160, True)
                 done = body.get("done", bool(old["done"]))
@@ -695,8 +709,9 @@ class CalendarHandler(BaseHTTPRequestHandler):
                     raise Failure(400,"Invalid done state")
                 due = _stamp(body["due_at"]) if body.get("due_at") else (
                     None if "due_at" in body else old["due_at"])
-                db.execute("UPDATE tasks SET title=?,done=?,due_at=?,updated_at=? WHERE id=?",
-                           (title,int(done),due,now(),tid))
+                priority = _priority(body.get("priority",old["priority"]))
+                db.execute("UPDATE tasks SET title=?,done=?,due_at=?,priority=?,updated_at=? WHERE id=?",
+                           (title,int(done),due,priority,now(),tid))
                 db.commit()
                 return self._send(200,{"ok":True})
             if path == "/api/v1/import.ics" and method == "POST":
