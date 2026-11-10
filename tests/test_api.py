@@ -323,6 +323,50 @@ class CalendarAPITests(unittest.TestCase):
             {"version":2,"start_at":"2026-11-10T17:00:00Z","end_at":"2026-11-10T18:00:00Z"})[0],200)
         self.assertEqual(self.request("GET",path,self.owner)[1]["exclusions"],[])
 
+    def test_reminders_create_update_export_import_and_recurrence(self):
+        cid=self.calendar(self.owner)
+        status,new=self.request("POST","/api/v1/events",self.owner,{
+            "calendar_id":cid,"title":"Dentist",
+            "start_at":"2026-11-10T16:00:00Z","end_at":"2026-11-10T17:00:00Z",
+            "reminder_minutes":15})
+        self.assertEqual(status,201,new)
+        eid=new["id"]
+        window="?start=2026-11-01T00:00:00Z&end=2026-12-01T00:00:00Z"
+        owner=lambda:self.request("GET","/api/v1/events"+window,self.owner)[1]["events"]
+        self.assertEqual(owner()[0]["reminder_minutes"],15)
+        self.assertEqual(self.request("POST","/api/v1/events",self.owner,{
+            "calendar_id":cid,"title":"Bad reminder",
+            "start_at":"2026-11-10T16:00:00Z","end_at":"2026-11-10T17:00:00Z",
+            "reminder_minutes":True})[0],400)
+        self.assertEqual(self.request("PATCH","/api/v1/events/"+eid,self.owner,
+            {"version":1,"reminder_minutes":30})[0],200)
+        self.assertEqual(owner()[0]["reminder_minutes"],30)
+        status,ics=self.request("GET","/api/v1/export.ics?calendar_id="+cid,self.owner,ics=True)
+        self.assertEqual(status,200)
+        self.assertIn("BEGIN:VALARM",ics)
+        self.assertIn("TRIGGER:-PT30M",ics)
+        status,new_cal=self.request("POST","/api/v1/calendars",self.owner,{"name":"Reminders copy"})
+        self.assertEqual(status,201)
+        status,result=self.request("POST","/api/v1/import.ics",self.owner,
+            {"calendar_id":new_cal["id"],"ics":ics})
+        self.assertEqual(status,201,result)
+        imported=[e for e in owner() if e["calendar_id"]==new_cal["id"]]
+        self.assertEqual(len(imported),1)
+        self.assertEqual(imported[0]["reminder_minutes"],30)
+        self.assertEqual(self.request("PATCH","/api/v1/events/"+eid,self.owner,
+            {"version":2,"reminder_minutes":None})[0],200)
+        self.assertIsNone(next(e for e in owner() if e["id"]==eid)["reminder_minutes"])
+
+    def test_ics_alarm_rejects_unsupported_action(self):
+        cid=self.calendar(self.owner)
+        ics="\r\n".join([
+            "BEGIN:VCALENDAR","BEGIN:VEVENT","UID:alarm@example.test",
+            "DTSTART:20261110T160000Z","DTEND:20261110T170000Z",
+            "SUMMARY:Event","BEGIN:VALARM","ACTION:EMAIL","TRIGGER:-PT15M",
+            "END:VALARM","END:VEVENT","END:VCALENDAR",""])
+        self.assertEqual(self.request("POST","/api/v1/import.ics",self.owner,
+            {"calendar_id":cid,"ics":ics})[0],400)
+
     def test_logout_and_security_headers(self):
         self.assertEqual(self.request("GET","/api/v1/calendars")[0],401)
         self.assertEqual(self.request("POST","/api/v1/register",body={})[0],401)

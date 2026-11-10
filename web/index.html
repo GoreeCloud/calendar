@@ -52,7 +52,7 @@
         <div class="headline"><p class="eyebrow">YOUR SCHEDULE</p><h1 id="period-title">Calendar</h1></div>
         <div class="top-actions"><button id="mobile-calendars" class="icon-btn mobile-only" title="Calendar settings" aria-label="Manage calendars">▣</button><button id="mobile-new-calendar" class="icon-btn mobile-only" title="New calendar" aria-label="New calendar">＋</button><button id="mobile-signout" class="icon-btn mobile-only" title="Sign out" aria-label="Sign out">↪</button><span id="sync-state" class="sync-status" role="status">● Connected</span><button id="today-btn" class="secondary">Today</button><div class="stepper"><button id="prev-btn" aria-label="Previous period">‹</button><button id="next-btn" aria-label="Next period">›</button></div></div>
       </header>
-      <div class="toolbar"><div class="toolbar-caption" id="toolbar-caption">Your time, organized.</div><div class="toolbar-actions"><button id="search-btn" class="secondary search-action">⌕ Search</button><button id="import-btn" class="secondary">↑ Import .ics</button><input type="file" id="import-file" accept=".ics,text/calendar" hidden><button id="export-btn" class="secondary">↓ Export calendar</button><button class="primary small-primary" id="toolbar-create">＋ Event</button></div></div>
+      <div class="toolbar"><div class="toolbar-caption" id="toolbar-caption">Your time, organized.</div><div class="toolbar-actions"><button id="enable-alerts" class="icon-btn" type="button" title="Enable browser reminders while Calendar is open" aria-label="Enable browser reminders">♢</button><button id="search-btn" class="secondary search-action">⌕ Search</button><button id="import-btn" class="secondary">↑ Import .ics</button><input type="file" id="import-file" accept=".ics,text/calendar" hidden><button id="export-btn" class="secondary">↓ Export calendar</button><button class="primary small-primary" id="toolbar-create">＋ Event</button></div></div>
       <main id="main-view" tabindex="-1" aria-live="polite"><div class="skeleton" aria-hidden="true"></div></main>
     </div>
     <nav id="mobile-nav" class="mobile-dock" aria-label="Mobile navigation">
@@ -78,6 +78,17 @@
         <div><label for="repeat-count">Occurrences</label><input id="repeat-count" type="number" min="2" max="366" value="12"></div>
       </div>
       <label for="event-calendar">Calendar</label><select id="event-calendar" required></select>
+      <label for="event-reminder">Reminder</label>
+      <select id="event-reminder">
+        <option value="">No reminder</option>
+        <option value="0">At event start</option>
+        <option value="5">5 minutes before</option>
+        <option value="10">10 minutes before</option>
+        <option value="15">15 minutes before</option>
+        <option value="30">30 minutes before</option>
+        <option value="60">1 hour before</option>
+        <option value="1440">1 day before</option>
+      </select>
       <label for="event-location">Location</label><input id="event-location" maxlength="500" placeholder="Add a location">
       <label for="event-description">Details</label><textarea id="event-description" maxlength="4000" rows="3" placeholder="Add a note"></textarea>
       <div class="dialog-actions"><button type="button" id="event-delete" class="danger" hidden>Delete event</button><button type="button" id="event-skip" class="secondary" hidden>Skip this date</button><button type="button" id="event-skipped" class="secondary" hidden>Manage skipped dates</button><span class="flex-spacer"></span><button type="button" class="secondary" data-close="event-dialog">Cancel</button><button class="primary" id="event-save" type="submit">Save event</button></div>

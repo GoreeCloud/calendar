@@ -95,6 +95,22 @@ def _property(line: str):
         params[key] = val.strip('"')
     return name, params, value
 
+def _alarm_minutes(raw: str) -> int:
+    if raw=="PT0S":
+        return 0
+    match=re.fullmatch(r"-PT([0-9]+)([MH])",raw)
+    if match:
+        number=int(match.group(1))
+        minutes=number*(60 if match.group(2)=="H" else 1)
+    else:
+        match=re.fullmatch(r"-P([0-9]+)D",raw)
+        if not match:
+            raise ImportErrorCalendar("Only display reminders before an event are supported")
+        minutes=int(match.group(1))*1440
+    if minutes>43200:
+        raise ImportErrorCalendar("Reminder must be at most 30 days before an event")
+    return minutes
+
 def _normalize(props: dict) -> dict:
     for field in ("UID", "DTSTART", "DTEND"):
         if field not in props:
@@ -160,18 +176,20 @@ def _normalize(props: dict) -> dict:
             exclusions.append(stamp)
         if len(set(exclusions))!=len(exclusions):
             raise ImportErrorCalendar("Duplicate EXDATE")
+    reminder_minutes=_alarm_minutes(props["_ALARM"][1]) if "_ALARM" in props else None
     return {
         "uid":uid, "title":title.strip(), "description":description, "location":location,
         "start_at":start.astimezone(UTC).isoformat(timespec="seconds").replace("+00:00","Z"),
         "end_at":end.astimezone(UTC).isoformat(timespec="seconds").replace("+00:00","Z"),
-        "all_day":all_day, "recurrence":recurrence,"exclusions":exclusions
+        "all_day":all_day, "recurrence":recurrence,"exclusions":exclusions,
+        "reminder_minutes":reminder_minutes
     }
 
 def parse_calendar(content: str) -> list[dict]:
     lines = _read_lines(content)
     if not lines or lines[0].upper() != "BEGIN:VCALENDAR" or lines[-1].upper() != "END:VCALENDAR":
         raise ImportErrorCalendar("Expected a complete VCALENDAR")
-    events, current, in_alarm, seen = [], None, False, set()
+    events, current, alarm, seen = [], None, None, set()
     for line in lines[1:-1]:
         name,params,value = _property(line)
         if name == "BEGIN" and value.upper() == "VEVENT":
@@ -180,7 +198,7 @@ def parse_calendar(content: str) -> list[dict]:
             current = {}
             continue
         if name == "END" and value.upper() == "VEVENT":
-            if current is None or in_alarm:
+            if current is None or alarm is not None:
                 raise ImportErrorCalendar("Malformed VEVENT")
             entry = _normalize(current)
             if entry["uid"] in seen:
@@ -193,12 +211,21 @@ def parse_calendar(content: str) -> list[dict]:
             continue
         if current is not None:
             if name == "BEGIN" and value.upper() == "VALARM":
-                if in_alarm:
-                    raise ImportErrorCalendar("Nested VALARM")
-                in_alarm = True
+                if alarm is not None or "_ALARM" in current:
+                    raise ImportErrorCalendar("Multiple or nested VALARM is unsupported")
+                alarm = {}
             elif name == "END" and value.upper() == "VALARM":
-                in_alarm = False
-            elif not in_alarm:
+                if alarm is None or alarm.get("ACTION", ({}, ""))[1].upper() != "DISPLAY" or "TRIGGER" not in alarm:
+                    raise ImportErrorCalendar("Only display alarms with a relative trigger are supported")
+                if alarm["TRIGGER"][0]:
+                    raise ImportErrorCalendar("Parameterized alarm triggers are unsupported")
+                current["_ALARM"]=({},alarm["TRIGGER"][1])
+                alarm=None
+            elif alarm is not None:
+                if name in alarm:
+                    raise ImportErrorCalendar("Duplicate VALARM property")
+                alarm[name]=(params,value)
+            else:
                 if name in current:
                     raise ImportErrorCalendar("Duplicate event property")
                 current[name] = (params,value)
@@ -270,6 +297,13 @@ def export_calendar(entries: list[dict]) -> str:
                 formatted=[dt.datetime.fromisoformat(t.replace("Z","+00:00")).strftime("%Y%m%dT%H%M%SZ")
                            for t in exclusions]
                 lines.append("EXDATE:"+",".join(formatted))
+        reminder=event.get("reminder_minutes")
+        if reminder is not None:
+            if type(reminder) is not int or not 0<=reminder<=43200:
+                raise ImportErrorCalendar("Invalid saved reminder")
+            trigger="PT0S" if reminder==0 else "-PT"+str(reminder)+"M"
+            lines.extend(["BEGIN:VALARM","TRIGGER:"+trigger,"ACTION:DISPLAY",
+                          "DESCRIPTION:"+_escape(event["title"]),"END:VALARM"])
         lines.append("END:VEVENT")
     lines.append("END:VCALENDAR")
     physical=[]

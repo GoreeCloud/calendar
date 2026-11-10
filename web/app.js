@@ -56,6 +56,7 @@ async function refresh(){
     ]);
     state.calendars=cal.calendars;state.events=eve.events;state.tasks=tasks.tasks;
     renderCalendarList();render();$("sync-state").textContent="● Connected";
+    checkLiveReminders();
   } catch(error){board.replaceChildren(el("p","empty",error.message));$("sync-state").textContent="● Offline";toast(error.message);}
   finally{state.loading=false;}
 }
@@ -241,6 +242,7 @@ function openEvent(event=null,date=new Date()){
   $("repeat-fields").hidden=$("event-repeat").value==="NONE";
   $("event-all-day").checked=Boolean(event?.all_day);
   $("event-calendar").value=event?.calendar_id||state.calendars[0]?.id||"";
+  $("event-reminder").value=event?.reminder_minutes==null?"":String(event.reminder_minutes);
   $("event-location").value=event?.location||"";
   $("event-description").value=event?.description||"";
   $("event-delete").hidden=!event||readOnly;
@@ -285,7 +287,8 @@ async function saveEvent(evt){
   }
   const body={title:$("event-title").value,calendar_id:$("event-calendar").value,
     description:$("event-description").value,location:$("event-location").value,
-    start_at:start.toISOString(),end_at:end.toISOString(),all_day:allDay};
+    start_at:start.toISOString(),end_at:end.toISOString(),all_day:allDay,
+    reminder_minutes:$("event-reminder").value===""?null:Number($("event-reminder").value)};
   const frequency=$("event-repeat").value;
   if(frequency!=="NONE"){
     const interval=Number($("repeat-interval").value),count=Number($("repeat-count").value);
@@ -435,6 +438,35 @@ function renderSearch(result){
     });
   }
 }
+const notifiedReminders=new Set();
+let browserAlertsEnabled=false;
+// Browser reminders are opportunistic while this tab is open, not background push.
+function checkLiveReminders(){
+  if(!state.token)return;
+  const now=Date.now();
+  for(const event of visibleEvents()){
+    if(event.reminder_minutes===null||event.reminder_minutes===undefined)continue;
+    const due=Date.parse(event.start_at)-Number(event.reminder_minutes)*60000;
+    if(!Number.isFinite(due)||due>now||due<now-120000)continue;
+    const key=event.id+":"+(event.occurrence_start_at||event.start_at)+":"+event.reminder_minutes;
+    if(notifiedReminders.has(key))continue;
+    notifiedReminders.add(key);
+    const message="Reminder: "+event.title+(event.all_day?" (all day)":" at "+timeText(event.start_at));
+    toast(message);
+    if(browserAlertsEnabled&&"Notification" in window&&Notification.permission==="granted"){
+      try{new Notification("GoreeCloud Calendar",{body:message,tag:key});}catch{/*toast remains visible*/}
+    }
+  }
+}
+$("enable-alerts").addEventListener("click",async()=>{
+  if(!("Notification" in window)){toast("This browser does not support desktop notifications.");return;}
+  try{
+    const permission=await Notification.requestPermission();
+    browserAlertsEnabled=permission==="granted";
+    toast(browserAlertsEnabled?"Browser alerts enabled while this tab is open.":"Browser alert permission was not granted.");
+  }catch{toast("Browser alerts are not available in this context.");}
+});
+setInterval(checkLiveReminders,30000);
 $("search-btn").addEventListener("click",()=>{
   $("search-query").value="";$("search-results").replaceChildren();
   $("search-dialog").showModal();$("search-query").focus();

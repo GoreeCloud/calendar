@@ -62,6 +62,10 @@ CREATE TABLE IF NOT EXISTS event_exclusions (
   occurrence_at TEXT NOT NULL,
   PRIMARY KEY (event_id, occurrence_at)
 );
+CREATE TABLE IF NOT EXISTS event_reminders (
+  event_id TEXT PRIMARY KEY REFERENCES events(id) ON DELETE CASCADE,
+  minutes_before INTEGER NOT NULL CHECK(minutes_before BETWEEN 0 AND 43200)
+);
 CREATE TABLE IF NOT EXISTS imported_uids (
   calendar_id TEXT NOT NULL REFERENCES calendars(id) ON DELETE CASCADE,
   external_uid TEXT NOT NULL,
@@ -156,6 +160,13 @@ def _event_values(payload: dict) -> tuple:
         if not start.endswith("T00:00:00Z") or not end.endswith("T00:00:00Z"):
             raise Failure(400, "All-day events require UTC midnight boundaries")
     return title, description, location, start, end, int(payload.get("all_day", False))
+
+def _reminder_minutes(value: object):
+    if value is None:
+        return None
+    if type(value) is not int or not 0 <= value <= 43200:
+        raise Failure(400, "Reminder must be 0–43200 minutes before start, or null")
+    return value
 
 def _ical_text(value: str) -> str:
     return (value.replace("\\", "\\\\").replace("\r", "")
@@ -407,16 +418,19 @@ class CalendarHandler(BaseHTTPRequestHandler):
                     if end <= start or (dt.datetime.fromisoformat(end.replace("Z","+00:00")) -
                         dt.datetime.fromisoformat(start.replace("Z","+00:00"))).days > 370:
                         raise Failure(400, "Invalid query window")
-                    rows = db.execute("SELECT e.* FROM events e JOIN calendars c ON e.calendar_id=c.id "
+                    rows = db.execute("SELECT e.*, alarm.minutes_before AS reminder_minutes FROM events e "
+                        "JOIN calendars c ON e.calendar_id=c.id "
                         "LEFT JOIN event_recurrence r ON r.event_id=e.id "
+                        "LEFT JOIN event_reminders alarm ON alarm.event_id=e.id "
                         "WHERE (c.owner_id=? OR EXISTS (SELECT 1 FROM calendar_members m "
                         "WHERE m.calendar_id=c.id AND m.user_id=?)) "
                         "AND e.start_at<? AND e.end_at>? AND r.event_id IS NULL "
                         "ORDER BY e.start_at LIMIT 501", (user, user, end, start)).fetchall()
                     events = [dict(r) for r in rows]
-                    recurring = db.execute("SELECT e.*, r.rule_json FROM events e "
+                    recurring = db.execute("SELECT e.*, r.rule_json, alarm.minutes_before AS reminder_minutes FROM events e "
                         "JOIN calendars c ON e.calendar_id=c.id "
                         "JOIN event_recurrence r ON r.event_id=e.id "
+                        "LEFT JOIN event_reminders alarm ON alarm.event_id=e.id "
                         "WHERE (c.owner_id=? OR EXISTS (SELECT 1 FROM calendar_members m "
                         "WHERE m.calendar_id=c.id AND m.user_id=?)) "
                         "AND e.start_at<? LIMIT 501", (user,user,end)).fetchall()
@@ -446,6 +460,7 @@ class CalendarHandler(BaseHTTPRequestHandler):
                     return self._send(200, {"events": events})
                 if method == "POST":
                     payload = self._body()
+                    reminder=_reminder_minutes(payload.pop("reminder_minutes",None))
                     from .recurrence import validate_rule, RecurrenceError
                     try:
                         rule=validate_rule(payload.pop("recurrence",None))
@@ -459,6 +474,8 @@ class CalendarHandler(BaseHTTPRequestHandler):
                                (eid, cid, title, desc, location, start, end, all_day, 1, now(), now()))
                     if rule is not None:
                         db.execute("INSERT INTO event_recurrence VALUES(?,?)", (eid, json.dumps(rule)))
+                    if reminder is not None:
+                        db.execute("INSERT INTO event_reminders VALUES(?,?)", (eid,reminder))
                     db.commit()
                     return self._send(201, {"id": eid, "version": 1})
             if path.startswith("/api/v1/events/") and path.endswith("/exclusions"):
@@ -523,6 +540,8 @@ class CalendarHandler(BaseHTTPRequestHandler):
                     db.commit()
                     return self._send(200, {"ok": True})
                 payload = self._body()
+                has_reminder = "reminder_minutes" in payload
+                reminder = _reminder_minutes(payload.pop("reminder_minutes", None))
                 has_rule = "recurrence" in payload
                 from .recurrence import validate_rule, RecurrenceError
                 try:
@@ -553,6 +572,10 @@ class CalendarHandler(BaseHTTPRequestHandler):
                     db.execute("DELETE FROM event_recurrence WHERE event_id=?", (eid,))
                     if rule is not None:
                         db.execute("INSERT INTO event_recurrence VALUES(?,?)", (eid,json.dumps(rule)))
+                if has_reminder:
+                    db.execute("DELETE FROM event_reminders WHERE event_id=?", (eid,))
+                    if reminder is not None:
+                        db.execute("INSERT INTO event_reminders VALUES(?,?)", (eid,reminder))
                 db.commit()
                 return self._send(200, {"id":eid,"version":version+1})
             if path == "/api/v1/tasks":
@@ -625,6 +648,9 @@ class CalendarHandler(BaseHTTPRequestHandler):
                     if entry.get("recurrence") is not None:
                         db.execute("INSERT INTO event_recurrence VALUES(?,?)",
                                    (eid,json.dumps(entry["recurrence"])))
+                    if entry.get("reminder_minutes") is not None:
+                        db.execute("INSERT INTO event_reminders VALUES(?,?)",
+                                   (eid,entry["reminder_minutes"]))
                     for excluded in entry.get("exclusions",[]):
                         db.execute("INSERT INTO event_exclusions(event_id,occurrence_at) VALUES(?,?)",
                                    (eid,excluded))
@@ -634,10 +660,11 @@ class CalendarHandler(BaseHTTPRequestHandler):
             if path == "/api/v1/export.ics" and method == "GET":
                 cid = parse_qs(route.query).get("calendar_id", [None])[0]
                 self._accessible_calendar(db, user, cid or "")
-                entries = db.execute("SELECT e.*,r.rule_json,"
+                entries = db.execute("SELECT e.*,r.rule_json,alarm.minutes_before AS reminder_minutes,"
                     "(SELECT m.external_uid FROM imported_uids m WHERE m.event_id=e.id "
                     "AND m.calendar_id=e.calendar_id LIMIT 1) AS original_uid "
                     "FROM events e LEFT JOIN event_recurrence r ON r.event_id=e.id "
+                    "LEFT JOIN event_reminders alarm ON alarm.event_id=e.id "
                     "WHERE e.calendar_id=? ORDER BY e.start_at", (cid,))
                 from .ical import export_calendar
                 records=[dict(row) for row in entries]
