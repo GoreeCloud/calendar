@@ -50,7 +50,7 @@
     <div class="workspace">
       <header class="topbar">
         <div class="headline"><p class="eyebrow">YOUR SCHEDULE</p><h1 id="period-title">Calendar</h1></div>
-        <div class="top-actions"><button id="mobile-new-calendar" class="icon-btn mobile-only" title="New calendar" aria-label="New calendar">＋</button><button id="mobile-signout" class="icon-btn mobile-only" title="Sign out" aria-label="Sign out">↪</button><span id="sync-state" class="sync-status" role="status">● Connected</span><button id="today-btn" class="secondary">Today</button><div class="stepper"><button id="prev-btn" aria-label="Previous period">‹</button><button id="next-btn" aria-label="Next period">›</button></div></div>
+        <div class="top-actions"><button id="mobile-calendars" class="icon-btn mobile-only" title="Calendar settings" aria-label="Manage calendars">▣</button><button id="mobile-new-calendar" class="icon-btn mobile-only" title="New calendar" aria-label="New calendar">＋</button><button id="mobile-signout" class="icon-btn mobile-only" title="Sign out" aria-label="Sign out">↪</button><span id="sync-state" class="sync-status" role="status">● Connected</span><button id="today-btn" class="secondary">Today</button><div class="stepper"><button id="prev-btn" aria-label="Previous period">‹</button><button id="next-btn" aria-label="Next period">›</button></div></div>
       </header>
       <div class="toolbar"><div class="toolbar-caption" id="toolbar-caption">Your time, organized.</div><div class="toolbar-actions"><button id="import-btn" class="secondary">↑ Import .ics</button><input type="file" id="import-file" accept=".ics,text/calendar" hidden><button id="export-btn" class="secondary">↓ Export calendar</button><button class="primary small-primary" id="toolbar-create">＋ Event</button></div></div>
       <main id="main-view" tabindex="-1" aria-live="polite"><div class="skeleton" aria-hidden="true"></div></main>
@@ -80,7 +80,27 @@
       <label for="event-calendar">Calendar</label><select id="event-calendar" required></select>
       <label for="event-location">Location</label><input id="event-location" maxlength="500" placeholder="Add a location">
       <label for="event-description">Details</label><textarea id="event-description" maxlength="4000" rows="3" placeholder="Add a note"></textarea>
-      <div class="dialog-actions"><button type="button" id="event-delete" class="danger" hidden>Delete event</button><span class="flex-spacer"></span><button type="button" class="secondary" data-close="event-dialog">Cancel</button><button class="primary" type="submit">Save event</button></div>
+      <div class="dialog-actions"><button type="button" id="event-delete" class="danger" hidden>Delete event</button><span class="flex-spacer"></span><button type="button" class="secondary" data-close="event-dialog">Cancel</button><button class="primary" id="event-save" type="submit">Save event</button></div>
+    </form>
+  </dialog>
+  <dialog id="calendars-dialog" class="editor-dialog">
+    <div class="dialog-heading"><div><span class="eyebrow">WORKSPACE</span><h2>Calendars</h2></div><button type="button" class="icon-btn" data-close="calendars-dialog" aria-label="Close">✕</button></div>
+    <p class="muted">Show or hide calendars, and manage access to calendars you own.</p>
+    <div id="mobile-calendar-list" class="calendar-list"></div>
+    <div class="dialog-actions"><button type="button" class="secondary" data-close="calendars-dialog">Done</button></div>
+  </dialog>
+  <dialog id="share-dialog" class="editor-dialog">
+    <form id="share-form">
+      <div class="dialog-heading"><div><span class="eyebrow">COLLABORATE</span><h2>Share calendar</h2></div><button type="button" class="icon-btn" data-close="share-dialog" aria-label="Close">✕</button></div>
+      <p id="share-calendar-name" class="muted"></p>
+      <label for="share-email">Member account email</label>
+      <input id="share-email" type="email" required maxlength="320" placeholder="member@example.com">
+      <label for="share-role">Permission</label>
+      <select id="share-role"><option value="read">Read only</option><option value="edit">Can edit</option></select>
+      <button class="primary" type="submit">Grant access</button>
+      <div class="share-members-heading">Current members</div>
+      <div id="share-members" class="share-members" aria-live="polite"></div>
+      <div class="dialog-actions"><button type="button" class="secondary" data-close="share-dialog">Close</button></div>
     </form>
   </dialog>
   <dialog id="calendar-dialog" class="editor-dialog">

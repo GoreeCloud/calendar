@@ -4,7 +4,7 @@ const $ = id => document.getElementById(id);
 const state = {
   token: sessionStorage.getItem("gc-calendar-token"),
   calendars: [], events: [], tasks: [], view: "month",
-  anchor: new Date(), hidden: new Set(), editing: null, loading: false
+  anchor: new Date(), hidden: new Set(), editing: null, sharingCalendar: null, loading: false
 };
 const byDay = d => new Date(d.getFullYear(),d.getMonth(),d.getDate());
 const addDays = (d,n) => {const v=byDay(d);v.setDate(v.getDate()+n);return v;};
@@ -59,15 +59,69 @@ async function refresh(){
   } catch(error){board.replaceChildren(el("p","empty",error.message));$("sync-state").textContent="● Offline";toast(error.message);}
   finally{state.loading=false;}
 }
+function calendarRole(id){return state.calendars.find(c=>c.id===id)?.role||"owner";}
+function canEdit(id){return ["owner","edit"].includes(calendarRole(id));}
 function renderCalendarList(){
-  const list=$("calendar-list");list.replaceChildren();
-  state.calendars.forEach(c=>{
-    const label=el("label","calendar-item");label.style.margin="0";
-    const check=el("input");check.type="checkbox";check.checked=!state.hidden.has(c.id);check.setAttribute("aria-label","Show "+c.name);
-    check.addEventListener("change",()=>{if(check.checked)state.hidden.delete(c.id);else state.hidden.add(c.id);render();});
-    const dot=el("span","calendar-dot");dot.style.backgroundColor=c.color;
-    label.append(check,dot,el("span",null,c.name));list.append(label);
+  ["calendar-list","mobile-calendar-list"].forEach(id=>{
+    const list=$(id);list.replaceChildren();
+    state.calendars.forEach(c=>{
+      const row=el("div","calendar-row");
+      const label=el("label","calendar-item");label.style.margin="0";
+      const check=el("input");check.type="checkbox";check.checked=!state.hidden.has(c.id);
+      check.setAttribute("aria-label","Show "+c.name);
+      check.addEventListener("change",()=>{
+        if(check.checked)state.hidden.delete(c.id);else state.hidden.add(c.id);
+        renderCalendarList();render();
+      });
+      const dot=el("span","calendar-dot");dot.style.backgroundColor=c.color;
+      const caption=el("span","calendar-caption",c.name);
+      label.append(check,dot,caption);row.append(label);
+      if(c.role==="owner"){
+        const share=el("button","share-action","Share");
+        share.type="button";share.setAttribute("aria-label","Share "+c.name);
+        share.addEventListener("click",()=>openShare(c));
+        row.append(share);
+      }else{
+        const tag=el("span","share-role",c.role==="edit"?"Editor":"Read only");
+        row.append(tag);
+      }
+      list.append(row);
+    });
   });
+}
+async function loadMembers(){
+  const cid=state.sharingCalendar?.id;
+  if(!cid)return;
+  const box=$("share-members");box.replaceChildren(el("p","muted","Loading members…"));
+  try{
+    const {members}=await api("/calendars/"+cid+"/members");
+    if(state.sharingCalendar?.id!==cid)return;
+    box.replaceChildren();
+    if(!members.length){box.append(el("p","muted","Only you have access."));return;}
+    members.forEach(member=>{
+      const row=el("div","member-row");
+      const name=el("div");name.append(el("strong",null,member.email),
+        el("small",null,member.role==="read"?"Read-only access":"Can edit"));
+      const remove=el("button","danger","Remove");remove.type="button";
+      remove.setAttribute("aria-label","Remove "+member.email);
+      remove.addEventListener("click",async()=>{
+        if(!confirm("Remove calendar access for "+member.email+"?"))return;
+        try{
+          await api("/calendars/"+cid+"/members/"+encodeURIComponent(member.user_id),{method:"DELETE"});
+          await loadMembers();toast("Member access revoked.");
+        }catch(error){toast(error.message);}
+      });
+      row.append(name,remove);box.append(row);
+    });
+  }catch(error){box.replaceChildren(el("p","error",error.message));}
+}
+function openShare(calendar){
+  if(calendar.role!=="owner")return;
+  state.sharingCalendar=calendar;
+  $("share-calendar-name").textContent=calendar.name;
+  $("share-email").value="";$("share-role").value="read";
+  $("share-dialog").showModal();
+  loadMembers();
 }
 function visibleEvents(){return state.events.filter(e=>!state.hidden.has(e.calendar_id));}
 function colorFor(id){return state.calendars.find(c=>c.id===id)?.color||"#6475de";}
@@ -144,22 +198,31 @@ function renderTasks(){
   if(!state.tasks.length)root.append(emptyView("A clear to-do list","Create a task when inspiration strikes."));
   const ul=el("ul","task-list");
   state.tasks.filter(t=>!state.hidden.has(t.calendar_id)).forEach(t=>{
-    const row=el("li","task-row"),check=el("input");check.type="checkbox";check.checked=!!t.done;check.setAttribute("aria-label","Complete "+t.title);
+    const row=el("li","task-row"),check=el("input");
+    check.type="checkbox";check.checked=!!t.done;check.disabled=!canEdit(t.calendar_id);
+    check.setAttribute("aria-label","Complete "+t.title);
     check.addEventListener("change",async()=>{try{await api("/tasks/"+t.id,{method:"PATCH",body:{done:check.checked}});await refresh();}catch(error){check.checked=!check.checked;toast(error.message);}});
     const name=el("span","task-text"+(t.done?" completed":""),t.title);
     if(t.due_at)name.append(el("small",null,"Due "+new Date(t.due_at).toLocaleString()));
     const del=el("button",null,"Delete");del.setAttribute("aria-label","Delete "+t.title);
     del.addEventListener("click",async()=>{if(!confirm("Delete this task?"))return;try{await api("/tasks/"+t.id,{method:"DELETE"});await refresh();}catch(error){toast(error.message);}});
+    if(!canEdit(t.calendar_id))del.hidden=true;
     row.append(check,name,del);ul.append(row);
   });
   root.append(ul);$("main-view").replaceChildren(root);
 }
-function fillCalendars(select){
-  select.replaceChildren();state.calendars.forEach(c=>{const option=el("option",null,c.name);option.value=c.id;select.append(option);});
+function fillCalendars(select,includeReadOnly=false){
+  select.replaceChildren();
+  state.calendars.filter(c=>includeReadOnly||canEdit(c.id)).forEach(c=>{
+    const option=el("option",null,c.name);option.value=c.id;select.append(option);
+  });
 }
 function openEvent(event=null,date=new Date()){
-  state.editing=event;fillCalendars($("event-calendar"));
-  $("event-dialog-title").textContent=event?.recurrence?"Edit recurring series":event?"Edit event":"New event";
+  if(!event&&!state.calendars.some(c=>canEdit(c.id))){toast("No editable calendar is available.");return;}
+  state.editing=event;
+  const readOnly=Boolean(event&&!canEdit(event.calendar_id));
+  fillCalendars($("event-calendar"),readOnly);
+  $("event-dialog-title").textContent=readOnly?"Read-only event":event?.recurrence?"Edit recurring series":event?"Edit event":"New event";
   $("event-title").value=event?.title||"";
   const eventStart=event?.series_start_at||event?.start_at;
   const eventEnd=event?.series_end_at||event?.end_at;
@@ -175,10 +238,14 @@ function openEvent(event=null,date=new Date()){
   $("event-calendar").value=event?.calendar_id||state.calendars[0]?.id||"";
   $("event-location").value=event?.location||"";
   $("event-description").value=event?.description||"";
-  $("event-delete").hidden=!event;$("event-dialog").showModal();$("event-title").focus();
+  $("event-delete").hidden=!event||readOnly;
+  $("event-save").hidden=readOnly;
+  $("event-form").querySelectorAll("input,textarea,select").forEach(control=>control.disabled=readOnly);
+  $("event-dialog").showModal();$("event-title").focus();
 }
 function openTask(){
-  fillCalendars($("task-calendar"));"task-title";
+  if(!state.calendars.some(c=>canEdit(c.id))){toast("No editable calendar is available.");return;}
+  fillCalendars($("task-calendar"));
   $("task-title").value="";$("task-due").value="";$("task-dialog").showModal();$("task-title").focus();
 }
 async function saveEvent(evt){
@@ -250,6 +317,17 @@ $("next-btn").addEventListener("click",()=>{const d=state.anchor;if(state.view==
 document.querySelectorAll("[data-view]").forEach(b=>b.addEventListener("click",()=>{state.view=b.dataset.view;render();}));
 ["new-event","toolbar-create","mobile-create"].forEach(id=>$(id).addEventListener("click",()=>openEvent()));
 $("new-calendar").addEventListener("click",()=>$("calendar-dialog").showModal());
+$("mobile-calendars").addEventListener("click",()=>$("calendars-dialog").showModal());
+$("share-form").addEventListener("submit",async e=>{
+  e.preventDefault();
+  if(!state.sharingCalendar)return;
+  try{
+    await api("/calendars/"+state.sharingCalendar.id+"/members",{method:"POST",
+      body:{email:$("share-email").value.trim(),role:$("share-role").value}});
+    $("share-email").value="";
+    await loadMembers();toast("Calendar access updated.");
+  }catch(error){toast(error.message);}
+});
 $("event-form").addEventListener("submit",saveEvent);
 $("event-repeat").addEventListener("change",()=>$("repeat-fields").hidden=$("event-repeat").value==="NONE");
 $("calendar-form").addEventListener("submit",async e=>{
