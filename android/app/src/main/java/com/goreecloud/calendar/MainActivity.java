@@ -51,6 +51,8 @@ public final class MainActivity extends Activity {
     private String selectedCalendarId;
     private LocalDate selectedDate = LocalDate.now();
     private LinearLayout body;
+    private LinearLayout rootLayout;
+    private LinearLayout resultContainer;
     private TextView status;
     private String activeTab = "agenda";
 
@@ -164,6 +166,7 @@ public final class MainActivity extends Activity {
         body.setPadding(0,dp(12),0,dp(18));
         scroll.addView(body);
         root.addView(scroll,new LinearLayout.LayoutParams(-1,0,1));
+        rootLayout=root;
         setContentView(root);
     }
 
@@ -208,7 +211,6 @@ public final class MainActivity extends Activity {
                 sessionToken=result.getString("token");
                 password.setText("");
                 renderDashboard();
-                loadAgenda();
             });
         });
     }
@@ -275,7 +277,7 @@ public final class MainActivity extends Activity {
         date.setOnClickListener(v -> {
             DatePickerDialog picker=new DatePickerDialog(this,(view,year,month,day)->{
                 selectedDate=LocalDate.of(year,month+1,day);
-                renderDashboard();loadAgenda();
+                renderDashboard();
             },selectedDate.getYear(),selectedDate.getMonthValue()-1,selectedDate.getDayOfMonth());
             picker.show();
         });
@@ -302,7 +304,13 @@ public final class MainActivity extends Activity {
         agenda.setOnClickListener(v->{activeTab="agenda";renderDashboard();loadAgenda();});
         tasks.setOnClickListener(v->{activeTab="tasks";renderDashboard();loadTasks();});
         add.setOnClickListener(v->{if(activeTab.equals("tasks"))newTask();else newEvent();});
-        body.addView(navigation);
+        resultContainer=column();
+        body.addView(resultContainer);
+        LinearLayout.LayoutParams dockParams=new LinearLayout.LayoutParams(-1,dp(62));
+        dockParams.leftMargin=dp(14);
+        dockParams.rightMargin=dp(14);
+        dockParams.bottomMargin=dp(14);
+        rootLayout.addView(navigation,dockParams);
         Button logout=button("Sign out",false);
         LinearLayout.LayoutParams signoutParams=new LinearLayout.LayoutParams(-1,dp(50));
         signoutParams.topMargin=dp(16);
@@ -325,6 +333,7 @@ public final class MainActivity extends Activity {
         if(sessionToken==null)return;
         status.setText("Loading your calendar…");
         final String token=sessionToken;
+        final LocalDate requestedDay=selectedDate;
         perform(() -> {
             JSONArray calendars=request("GET","/calendars",null,token).getJSONArray("calendars");
             if(calendars.length()>0 && selectedCalendarId==null)
@@ -334,8 +343,9 @@ public final class MainActivity extends Activity {
             JSONObject events=request("GET","/events?start="+start+"&end="+end,null,token);
             return new JSONObject().put("events",events.getJSONArray("events"));
         },result->{
-            if(!activeTab.equals("agenda") || !token.equals(sessionToken))return;
+            if(!activeTab.equals("agenda") || !token.equals(sessionToken) || !requestedDay.equals(selectedDate))return;
             status.setText("");
+            resultContainer.removeAllViews();
             JSONArray events=result.getJSONArray("events");
             LinearLayout list=card(16);
             list.addView(text("Events on "+selectedDate.format(DateTimeFormatter.ofPattern("MMM d")),19,true));
@@ -352,7 +362,7 @@ public final class MainActivity extends Activity {
                 params.topMargin=dp(9);
                 list.addView(item,params);
             }
-            body.addView(list);
+            resultContainer.addView(list);
         });
     }
 
@@ -363,6 +373,7 @@ public final class MainActivity extends Activity {
         perform(() -> request("GET","/tasks",null,token),result->{
             if(!activeTab.equals("tasks")||!token.equals(sessionToken))return;
             status.setText("");
+            resultContainer.removeAllViews();
             JSONArray tasks=result.getJSONArray("tasks");
             LinearLayout list=card(16);
             list.addView(text("Tasks",19,true));
@@ -380,7 +391,7 @@ public final class MainActivity extends Activity {
                     request("PATCH","/tasks/"+id,new JSONObject().put("done",!done),token),
                     answer->{renderDashboard();}));
             }
-            body.addView(list);
+            resultContainer.addView(list);
         });
     }
 
