@@ -902,6 +902,17 @@ class CalendarHandler(BaseHTTPRequestHandler):
             computed = digest_password(body["password"], salt)
             if row is None or not hmac.compare_digest(computed, expected):
                 raise Failure(401, "Invalid credentials")
+            # The KDF happens without holding a SQLite writer lock. Recheck
+            # password state under a short write transaction before creating
+            # a session: a concurrent password rotation must invalidate an
+            # in-flight login using the former password.
+            db.execute("BEGIN IMMEDIATE")
+            fresh=db.execute("SELECT salt,password_hash FROM users WHERE id=?",
+                             (row["id"],)).fetchone()
+            if fresh is None or fresh["salt"]!=row["salt"] or not hmac.compare_digest(
+                fresh["password_hash"],expected
+            ):
+                raise Failure(401,"Invalid credentials")
             token = secrets.token_urlsafe(32)
             expiry = int(time.time()) + 7*86400
             db.execute("DELETE FROM sessions WHERE expires<=?",(int(time.time()),))

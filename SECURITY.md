@@ -38,3 +38,7 @@ The browser uses only bundled same-origin scripts and CSS, with regression check
 ## Data portability boundary
 
 The owner-only `/api/v1/export.json` endpoint deliberately excludes password hashes, sessions, other user accounts, calendar membership directories and calendars only shared by others. It returns sensitive event/task content as plaintext to the authenticated browser after explicit user action. The downloaded file is outside server retention and protection controls; operators and users should secure it appropriately. This is not a production GDPR compliance claim or an encrypted backup.
+
+## Password-rotation concurrency
+
+A password change verifies the current secret, stores a new independently salted scrypt hash and revokes all account sessions. Logins recheck the credential record under a short SQLite writer transaction after performing their password derivation, so an old-password login whose derivation overlaps a password change cannot issue a post-rotation session. This is development-local transactional safety, not multi-node production revocation or MFA.

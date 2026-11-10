@@ -658,6 +658,44 @@ class CalendarAPITests(unittest.TestCase):
         self.assertNotIn("Private planning notes",json.dumps(other[1]))
         self.assertEqual(self.request("GET","/api/v1/export.json")[0],401)
 
+    def test_login_cannot_issue_old_password_session_after_rotation(self):
+        from unittest.mock import patch
+        from calendar_app.core import digest_password as original_digest
+        waiting=threading.Event()
+        resume=threading.Event()
+        lock=threading.Lock()
+        caught=[False]
+        login_response=[]
+        def delayed_digest(password,salt):
+            should_pause=False
+            with lock:
+                if password=="very-long-owner-password" and not caught[0]:
+                    caught[0]=True
+                    should_pause=True
+            if should_pause:
+                waiting.set()
+                resume.wait(2)
+            return original_digest(password,salt)
+        def old_login():
+            login_response.append(self.request("POST","/api/v1/login",body={
+                "email":"owner@example.test","password":"very-long-owner-password"}))
+        with patch("calendar_app.core.digest_password",side_effect=delayed_digest):
+            thread=threading.Thread(target=old_login,daemon=True)
+            thread.start()
+            try:
+                self.assertTrue(waiting.wait(2),"Old-password login never entered KDF")
+                self.assertEqual(self.request("POST","/api/v1/account/change-password",self.owner,{
+                    "current_password":"very-long-owner-password",
+                    "new_password":"fully-rotated-owner-password"})[0],200)
+            finally:
+                resume.set()
+                thread.join(timeout=3)
+        self.assertFalse(thread.is_alive(),"In-flight login did not terminate")
+        self.assertEqual(login_response[0][0],401)
+        self.assertEqual(self.request("GET","/api/v1/me",self.owner)[0],401)
+        new=self.login("owner@example.test","fully-rotated-owner-password")
+        self.assertEqual(self.request("GET","/api/v1/me",new)[0],200)
+
     def test_logout_and_security_headers(self):
         self.assertEqual(self.request("GET","/api/v1/calendars")[0],401)
         self.assertEqual(self.request("POST","/api/v1/register",body={})[0],401)
