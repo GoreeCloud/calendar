@@ -52,7 +52,7 @@
         <div class="headline"><p class="eyebrow">YOUR SCHEDULE</p><h1 id="period-title">Calendar</h1></div>
         <div class="top-actions"><button id="mobile-calendars" class="icon-btn mobile-only" title="Calendar settings" aria-label="Manage calendars">▣</button><button id="mobile-new-calendar" class="icon-btn mobile-only" title="New calendar" aria-label="New calendar">＋</button><button id="mobile-signout" class="icon-btn mobile-only" title="Sign out" aria-label="Sign out">↪</button><span id="sync-state" class="sync-status" role="status">● Connected</span><button id="today-btn" class="secondary">Today</button><div class="stepper"><button id="prev-btn" aria-label="Previous period">‹</button><button id="next-btn" aria-label="Next period">›</button></div></div>
       </header>
-      <div class="toolbar"><div class="toolbar-caption" id="toolbar-caption">Your time, organized.</div><div class="toolbar-actions"><button id="import-btn" class="secondary">↑ Import .ics</button><input type="file" id="import-file" accept=".ics,text/calendar" hidden><button id="export-btn" class="secondary">↓ Export calendar</button><button class="primary small-primary" id="toolbar-create">＋ Event</button></div></div>
+      <div class="toolbar"><div class="toolbar-caption" id="toolbar-caption">Your time, organized.</div><div class="toolbar-actions"><button id="search-btn" class="secondary search-action">⌕ Search</button><button id="import-btn" class="secondary">↑ Import .ics</button><input type="file" id="import-file" accept=".ics,text/calendar" hidden><button id="export-btn" class="secondary">↓ Export calendar</button><button class="primary small-primary" id="toolbar-create">＋ Event</button></div></div>
       <main id="main-view" tabindex="-1" aria-live="polite"><div class="skeleton" aria-hidden="true"></div></main>
     </div>
     <nav id="mobile-nav" class="mobile-dock" aria-label="Mobile navigation">
@@ -88,6 +88,15 @@
     <p class="muted">Show or hide calendars, and manage access to calendars you own.</p>
     <div id="mobile-calendar-list" class="calendar-list"></div>
     <div class="dialog-actions"><button type="button" class="secondary" data-close="calendars-dialog">Done</button></div>
+  </dialog>
+  <dialog id="search-dialog" class="editor-dialog">
+    <div class="dialog-heading"><div><span class="eyebrow">FIND SOMETHING</span><h2>Search calendar</h2></div><button type="button" class="icon-btn" data-close="search-dialog" aria-label="Close">✕</button></div>
+    <form id="search-form">
+      <label for="search-query">Search events, notes, locations, and tasks</label>
+      <input id="search-query" type="search" minlength="2" maxlength="100" required placeholder="Project meeting, appointment, deadline…">
+      <div class="dialog-actions"><button class="primary" type="submit">Search</button></div>
+    </form>
+    <div id="search-results" class="search-results" aria-live="polite"></div>
   </dialog>
   <dialog id="share-dialog" class="editor-dialog">
     <form id="share-form">

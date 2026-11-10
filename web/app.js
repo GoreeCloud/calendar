@@ -344,6 +344,53 @@ $("event-delete").addEventListener("click",async()=>{
   catch(error){toast(error.message);}
 });
 document.querySelectorAll("[data-close]").forEach(b=>b.addEventListener("click",()=>$(b.dataset.close).close()));
+function renderSearch(result){
+  const root=$("search-results");root.replaceChildren();
+  const {events,tasks}=result;
+  if(!events.length&&!tasks.length){root.append(el("p","muted","No matching events or tasks."));return;}
+  const heading=el("p","search-summary",events.length+" event(s) · "+tasks.length+" task(s)");
+  root.append(heading);
+  if(events.length){
+    root.append(el("h3",null,"Events"));
+    events.forEach(event=>{
+      const row=el("button","search-result");
+      const date=event.all_day?event.start_at.slice(0,10):shortDate(new Date(event.start_at));
+      row.append(el("strong",null,event.title),el("small",null,date+(event.location?" · "+event.location:"")));
+      row.addEventListener("click",async()=>{
+        $("search-dialog").close();
+        state.anchor=event.all_day?new Date(event.start_at.slice(0,10)+"T12:00:00"):new Date(event.start_at);
+        state.view="agenda";
+        await refresh();
+      });
+      root.append(row);
+    });
+  }
+  if(tasks.length){
+    root.append(el("h3",null,"Tasks"));
+    tasks.forEach(task=>{
+      const row=el("button","search-result");
+      row.append(el("strong",null,task.title),el("small",null,task.done?"Completed":"To do"));
+      row.addEventListener("click",()=>{
+        $("search-dialog").close();state.view="tasks";render();
+      });
+      root.append(row);
+    });
+  }
+}
+$("search-btn").addEventListener("click",()=>{
+  $("search-query").value="";$("search-results").replaceChildren();
+  $("search-dialog").showModal();$("search-query").focus();
+});
+$("search-form").addEventListener("submit",async e=>{
+  e.preventDefault();
+  const q=$("search-query").value.trim();
+  if(q.length<2){toast("Use at least two characters.");return;}
+  $("search-results").replaceChildren(el("div","skeleton"));
+  try{
+    const results=await api("/search?q="+encodeURIComponent(q));
+    renderSearch(results);
+  }catch(error){$("search-results").replaceChildren(el("p","error",error.message));}
+});
 $("import-btn").addEventListener("click",()=>$("import-file").click());
 $("import-file").addEventListener("change",async ()=>{
   const input=$("import-file"),file=input.files?.[0];input.value="";

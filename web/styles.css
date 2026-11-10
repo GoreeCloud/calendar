@@ -186,3 +186,11 @@ nav#desktop-nav{display:flex;flex-direction:column;gap:5px}
 .member-row small{display:block;color:var(--gc-text-soft)}
 .member-row .danger{min-height:36px;flex-shrink:0}
 #calendars-dialog .calendar-list{margin-top:20px}
+
+.search-results{margin-top:24px;display:flex;flex-direction:column;gap:9px}
+.search-results h3{margin:13px 0 3px;font-size:16px}
+.search-summary{font-size:13px;color:var(--gc-text-soft)}
+.search-result{display:flex;flex-direction:column;text-align:left;border:1px solid var(--gc-outline);border-radius:12px;background:var(--gc-surface);color:var(--gc-text);padding:11px 14px;gap:3px}
+.search-result:hover{background:var(--gc-surface-tonal)}
+.search-result small{color:var(--gc-text-soft)}
+@media(max-width:760px){.toolbar-actions .search-action{display:inline-flex}}
