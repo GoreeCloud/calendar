@@ -71,6 +71,12 @@
       <label for="event-title">Event name</label><input id="event-title" maxlength="160" required placeholder="What's on your calendar?">
       <label class="all-day-option" for="event-all-day"><input type="checkbox" id="event-all-day"> All-day event</label>
       <div class="two-fields"><div><label for="event-start">Starts</label><input id="event-start" type="datetime-local" required></div><div><label for="event-end">Ends</label><input id="event-end" type="datetime-local" required></div></div>
+      <label for="event-repeat">Repeat</label>
+      <select id="event-repeat"><option value="NONE">Does not repeat</option><option value="DAILY">Daily</option><option value="WEEKLY">Weekly</option><option value="MONTHLY">Monthly</option><option value="YEARLY">Yearly</option></select>
+      <div id="repeat-fields" class="two-fields" hidden>
+        <div><label for="repeat-interval">Repeat every</label><input id="repeat-interval" type="number" min="1" max="24" value="1"></div>
+        <div><label for="repeat-count">Occurrences</label><input id="repeat-count" type="number" min="2" max="366" value="12"></div>
+      </div>
       <label for="event-calendar">Calendar</label><select id="event-calendar" required></select>
       <label for="event-location">Location</label><input id="event-location" maxlength="500" placeholder="Add a location">
       <label for="event-description">Details</label><textarea id="event-description" maxlength="4000" rows="3" placeholder="Add a note"></textarea>

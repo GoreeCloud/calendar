@@ -45,6 +45,10 @@ CREATE TABLE IF NOT EXISTS events (
   version INTEGER NOT NULL DEFAULT 1, created_at TEXT NOT NULL, updated_at TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_events_window ON events(calendar_id, start_at, end_at);
+CREATE TABLE IF NOT EXISTS event_recurrence (
+  event_id TEXT PRIMARY KEY REFERENCES events(id) ON DELETE CASCADE,
+  rule_json TEXT NOT NULL
+);
 CREATE TABLE IF NOT EXISTS imported_uids (
   calendar_id TEXT NOT NULL REFERENCES calendars(id) ON DELETE CASCADE,
   external_uid TEXT NOT NULL,
@@ -308,19 +312,45 @@ class CalendarHandler(BaseHTTPRequestHandler):
                         dt.datetime.fromisoformat(start.replace("Z","+00:00"))).days > 370:
                         raise Failure(400, "Invalid query window")
                     rows = db.execute("SELECT e.* FROM events e JOIN calendars c ON e.calendar_id=c.id "
-                        "WHERE c.owner_id=? AND e.start_at<? AND e.end_at>? ORDER BY e.start_at LIMIT 501",
-                        (user, end, start)).fetchall()
-                    if len(rows) > 500:
-                        raise Failure(413, "Window contains too many events; narrow the date range")
-                    return self._send(200, {"events": [dict(r) for r in rows]})
+                        "LEFT JOIN event_recurrence r ON r.event_id=e.id "
+                        "WHERE c.owner_id=? AND e.start_at<? AND e.end_at>? AND r.event_id IS NULL "
+                        "ORDER BY e.start_at LIMIT 501", (user, end, start)).fetchall()
+                    events = [dict(r) for r in rows]
+                    recurring = db.execute("SELECT e.*, r.rule_json FROM events e "
+                        "JOIN calendars c ON e.calendar_id=c.id "
+                        "JOIN event_recurrence r ON r.event_id=e.id "
+                        "WHERE c.owner_id=? AND e.start_at<? LIMIT 501", (user, end)).fetchall()
+                    if len(recurring)>500:
+                        raise Failure(413, "Too many recurring series")
+                    from .recurrence import expand, RecurrenceError
+                    window_start = dt.datetime.fromisoformat(start.replace("Z","+00:00"))
+                    window_end = dt.datetime.fromisoformat(end.replace("Z","+00:00"))
+                    for record in recurring:
+                        item = dict(record)
+                        rule = json.loads(item.pop("rule_json"))
+                        try:
+                            events.extend(expand(item,rule,window_start,window_end))
+                        except RecurrenceError:
+                            raise Failure(422,"Cannot expand corrupted recurrence") from None
+                        if len(events)>500:
+                            raise Failure(413, "Window contains too many events; narrow the date range")
+                    events.sort(key=lambda e: (e["start_at"], e["id"]))
+                    return self._send(200, {"events": events})
                 if method == "POST":
                     payload = self._body()
+                    from .recurrence import validate_rule, RecurrenceError
+                    try:
+                        rule=validate_rule(payload.pop("recurrence",None))
+                    except RecurrenceError as error:
+                        raise Failure(400,str(error)) from None
                     cid = _text(payload.get("calendar_id"), "calendar_id", 64, True)
                     self._owned_calendar(db, user, cid)
                     title, desc, location, start, end, all_day = _event_values(payload)
                     eid = uuid.uuid4().hex
                     db.execute("INSERT INTO events VALUES(?,?,?,?,?,?,?,?,?,?,?)",
                                (eid, cid, title, desc, location, start, end, all_day, 1, now(), now()))
+                    if rule is not None:
+                        db.execute("INSERT INTO event_recurrence VALUES(?,?)", (eid, json.dumps(rule)))
                     db.commit()
                     return self._send(201, {"id": eid, "version": 1})
             if path.startswith("/api/v1/events/") and method in ("PATCH", "DELETE"):
@@ -331,6 +361,12 @@ class CalendarHandler(BaseHTTPRequestHandler):
                     db.commit()
                     return self._send(200, {"ok": True})
                 payload = self._body()
+                has_rule = "recurrence" in payload
+                from .recurrence import validate_rule, RecurrenceError
+                try:
+                    rule = validate_rule(payload.pop("recurrence", None))
+                except RecurrenceError as error:
+                    raise Failure(400,str(error)) from None
                 version = payload.pop("version", None)
                 if type(version) is not int:
                     raise Failure(428, "Current event version required")
@@ -348,6 +384,10 @@ class CalendarHandler(BaseHTTPRequestHandler):
                     "WHERE id=? AND version=?", (cid,title,desc,location,start,end,all_day,now(),eid,version))
                 if changed.rowcount != 1:
                     raise Failure(409, "Event changed; refresh")
+                if has_rule:
+                    db.execute("DELETE FROM event_recurrence WHERE event_id=?", (eid,))
+                    if rule is not None:
+                        db.execute("INSERT INTO event_recurrence VALUES(?,?)", (eid,json.dumps(rule)))
                 db.commit()
                 return self._send(200, {"id":eid,"version":version+1})
             if path == "/api/v1/tasks":

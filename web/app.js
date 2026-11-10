@@ -159,12 +159,18 @@ function fillCalendars(select){
 }
 function openEvent(event=null,date=new Date()){
   state.editing=event;fillCalendars($("event-calendar"));
-  $("event-dialog-title").textContent=event?"Edit event":"New event";
+  $("event-dialog-title").textContent=event?.recurrence?"Edit recurring series":event?"Edit event":"New event";
   $("event-title").value=event?.title||"";
-  let start=event?new Date(event.start_at):new Date(date.getFullYear(),date.getMonth(),date.getDate(),9,0);
-  let end=event?new Date(event.end_at):new Date(start.getTime()+60*60*1000);
-  $("event-start").value=event?.all_day?event.start_at.slice(0,10)+"T00:00":localField(start);
-  $("event-end").value=event?.all_day?event.end_at.slice(0,10)+"T00:00":localField(end);
+  const eventStart=event?.series_start_at||event?.start_at;
+  const eventEnd=event?.series_end_at||event?.end_at;
+  let start=event?new Date(eventStart):new Date(date.getFullYear(),date.getMonth(),date.getDate(),9,0);
+  let end=event?new Date(eventEnd):new Date(start.getTime()+60*60*1000);
+  $("event-start").value=event?.all_day?eventStart.slice(0,10)+"T00:00":localField(start);
+  $("event-end").value=event?.all_day?eventEnd.slice(0,10)+"T00:00":localField(end);
+  $("event-repeat").value=event?.recurrence?.freq||"NONE";
+  $("repeat-interval").value=event?.recurrence?.interval||1;
+  $("repeat-count").value=event?.recurrence?.count||12;
+  $("repeat-fields").hidden=$("event-repeat").value==="NONE";
   $("event-all-day").checked=Boolean(event?.all_day);
   $("event-calendar").value=event?.calendar_id||state.calendars[0]?.id||"";
   $("event-location").value=event?.location||"";
@@ -198,6 +204,17 @@ async function saveEvent(evt){
   const body={title:$("event-title").value,calendar_id:$("event-calendar").value,
     description:$("event-description").value,location:$("event-location").value,
     start_at:start.toISOString(),end_at:end.toISOString(),all_day:allDay};
+  const frequency=$("event-repeat").value;
+  if(frequency!=="NONE"){
+    const interval=Number($("repeat-interval").value),count=Number($("repeat-count").value);
+    if(!Number.isInteger(interval)||interval<1||interval>24||!Number.isInteger(count)||count<2||count>366){
+      toast("Repeat interval must be 1–24 and occurrences 2–366.");return;
+    }
+    body.recurrence={freq:frequency,interval,count,
+      tzid:allDay?null:(state.editing?.recurrence?.tzid||Intl.DateTimeFormat().resolvedOptions().timeZone||null)};
+  }else if(state.editing?.recurrence){
+    body.recurrence=null;
+  }
   try{
     if(state.editing){body.version=state.editing.version;await api("/events/"+state.editing.id,{method:"PATCH",body});}
     else await api("/events",{method:"POST",body});
@@ -234,6 +251,7 @@ document.querySelectorAll("[data-view]").forEach(b=>b.addEventListener("click",(
 ["new-event","toolbar-create","mobile-create"].forEach(id=>$(id).addEventListener("click",()=>openEvent()));
 $("new-calendar").addEventListener("click",()=>$("calendar-dialog").showModal());
 $("event-form").addEventListener("submit",saveEvent);
+$("event-repeat").addEventListener("change",()=>$("repeat-fields").hidden=$("event-repeat").value==="NONE");
 $("calendar-form").addEventListener("submit",async e=>{
   e.preventDefault();try{await api("/calendars",{method:"POST",body:{name:$("calendar-name").value,color:$("calendar-color").value}});
   $("calendar-dialog").close();$("calendar-name").value="";await refresh();toast("Calendar created.");}catch(error){toast(error.message);}

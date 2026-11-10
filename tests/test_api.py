@@ -127,6 +127,42 @@ class CalendarAPITests(unittest.TestCase):
         self.assertEqual(self.request("POST","/api/v1/import.ics",self.other,
                          {"calendar_id":cid,"ics":bad.replace("\\n","\n")})[0],404)
 
+    def test_count_bounded_recurring_events_preserve_local_hour(self):
+        cid=self.calendar(self.owner)
+        status,data=self.request("POST","/api/v1/events",self.owner,{
+            "calendar_id":cid, "title":"Weekly planning",
+            "start_at":"2026-03-01T15:00:00Z", "end_at":"2026-03-01T16:00:00Z",
+            "recurrence":{"freq":"WEEKLY","interval":1,"count":3,"tzid":"America/Chicago"}
+        })
+        self.assertEqual(status,201,data)
+        eid=data["id"]
+        window="?start=2026-03-01T00:00:00Z&end=2026-03-31T00:00:00Z"
+        events=self.request("GET","/api/v1/events"+window,self.owner)[1]["events"]
+        self.assertEqual(len(events),3,events)
+        self.assertEqual([e["start_at"] for e in events],
+                         ["2026-03-01T15:00:00Z","2026-03-08T14:00:00Z",
+                          "2026-03-15T14:00:00Z"])
+        self.assertTrue(all(e["id"]==eid and e["recurrence"]["count"]==3 for e in events))
+        self.assertEqual(self.request("PATCH","/api/v1/events/"+eid,self.owner,
+                          {"version":1,"title":"Updated recurring title"})[0],200)
+        again=self.request("GET","/api/v1/events"+window,self.owner)[1]["events"]
+        self.assertTrue(all(e["title"]=="Updated recurring title" for e in again))
+        self.assertEqual(self.request("DELETE","/api/v1/events/"+eid,self.owner)[0],200)
+        self.assertEqual(self.request("GET","/api/v1/events"+window,self.owner)[1]["events"],[])
+
+    def test_recurrence_validates_and_skips_impossible_monthly_days(self):
+        cid=self.calendar(self.owner)
+        base={"calendar_id":cid,"title":"Monthly bills",
+              "start_at":"2026-01-31T09:00:00Z","end_at":"2026-01-31T09:30:00Z"}
+        bad=dict(base,recurrence={"freq":"DAILY","interval":0,"count":3,"tzid":None})
+        self.assertEqual(self.request("POST","/api/v1/events",self.owner,bad)[0],400)
+        good=dict(base,recurrence={"freq":"MONTHLY","interval":1,"count":3,"tzid":None})
+        self.assertEqual(self.request("POST","/api/v1/events",self.owner,good)[0],201)
+        events=self.request("GET","/api/v1/events?start=2026-01-01T00:00:00Z&end=2026-05-31T00:00:00Z",
+                            self.owner)[1]["events"]
+        self.assertEqual([e["start_at"][:10] for e in events],
+                         ["2026-01-31","2026-03-31","2026-05-31"][:len(events)])
+
     def test_logout_and_security_headers(self):
         self.assertEqual(self.request("GET","/api/v1/calendars")[0],401)
         self.assertEqual(self.request("POST","/api/v1/register",body={})[0],401)

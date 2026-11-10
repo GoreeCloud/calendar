@@ -169,3 +169,6 @@ nav#desktop-nav{display:flex;flex-direction:column;gap:5px}
 /* All-day checkbox stays legible across theme modes and mobile sizes. */
 .all-day-option{display:flex;align-items:center;gap:10px;margin-top:16px;font-weight:700}
 .all-day-option input{width:18px;height:18px;accent-color:var(--gc-brand)}
+
+#repeat-fields[hidden]{display:none}
+#repeat-fields input{width:100%}
