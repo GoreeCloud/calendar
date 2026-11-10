@@ -1,65 +1,69 @@
 # GoreeCloud Calendar
 
-A **self-hostable, open-source calendar development preview** with a Python/SQLite service and responsive web interface. The calendar backend is independent of Google, Outlook, TimeTree, Proton and Tuta. **Not production-ready.**
+Privacy-conscious, self-hosted calendar development preview. The repository includes a Python/SQLite backend, responsive web app, native GTK4 Linux client source and native Java Android client source. No third-party calendar account is required.
 
-## Current functionality (source implemented; verify the current CI status)
+**Status: development preview — not production-ready.** Do not expose the HTTP listener to untrusted networks or store your only copy of important schedules.
 
-- Local interactive account creation and scrypt password hashing.
-- Authenticated, revocable seven-day bearer sessions stored as hashed tokens.
-- Private per-user calendars with create, view, edit and delete operations.
-- Create, view, edit and delete timed events using ISO-8601 UTC timestamps; optimistic event version checks.
-- Create, complete and delete tasks.
-- Responsive web month, week, agenda and task views with event editing.
-- Calendar display toggles, native-browser ICS calendar export, sign-in and sign-out.
-- Local SQLite storage, parameterized SQL, bounded JSON input and no third-party browser scripts.
-- Container configuration bound to localhost, an HTTP integration test suite, and a manual no-clobber SQLite snapshot command.
+## Source-implemented capabilities
 
-**Not yet implemented or verified:** sharing, recurrence, all-day event UI, importing ICS, CalDAV, external synchronization, encrypted sharing, offline editing, reminders, notifications, appointment booking, public calendars, analytics and AI. Linux and Android apps still require verified installable deliverables. Photo albums are excluded.
+- Locally provisioned accounts, salted scrypt password hashing, expiring bearer sessions and logout revocation.
+- Multiple private calendars and locally managed account sharing with owner, read and edit roles.
+- Timed, multi-day and all-day events, timezone-aware event editing, version conflict handling.
+- Bounded recurrence: daily, weekly, monthly, yearly; interval 1–24, count 2–366; optional IANA timezone for local-hour preservation.
+- Tasks with due dates, completion and editing.
+- Permission-scoped event/task search.
+- ICS import/export: all-day dates, folded text, IANA TZID, bounded RRULEs, duplicate-UID protection. Unsupported complex rules are rejected.
+- Responsive month, week, agenda, task views; calendar visibility, mobile switcher, recurring-series editing, search and sharing.
+- Online SQLite snapshots with no-overwrite publication; independent backup verification.
+- Native GTK4 Linux client and Java Android client source, with Android debug APK compilation in CI.
 
-## Local run — Python 3.11+
+**Not implemented:** CalDAV, external two-way sync, recurring exception editing, public calendar discovery, meeting invitations/RSVP, appointment booking, offline edits, alerts/push notifications, end-to-end encryption, AI scheduling, advanced analytics, signed production artifacts or production deployment. Photo albums are explicitly excluded.
 
-There are no additional Python runtime dependencies.
+See [current feature status](docs/IMPLEMENTED-FEATURES.md), [planned features](docs/PLANNED-FEATURES.md), [HTTP API](docs/API.md) and [security boundaries](SECURITY.md).
+
+## Run locally
+
+Requires Python 3.11+; no extra Python runtime packages.
 
     python -m calendar_app create-admin --email you@example.com
     python -m calendar_app serve
 
-The account-creation command requests your password interactively (minimum twelve characters). Open http://127.0.0.1:8787/ and sign in. By default, data is stored under ./data/calendar.sqlite3. Override the path with GC_CALENDAR_DB.
+The account-creation command prompts for a password of 12 or more characters. Open http://127.0.0.1:8787/ in a browser and sign in. Default database path: ./data/calendar.sqlite3; set GC_CALENDAR_DB to override. Create other users using the same create-admin command before sharing calendars.
 
-## Docker Compose (local-only example)
+## Docker Compose (local-only)
 
     docker compose build
     docker compose run --rm calendar python -m calendar_app create-admin --email you@example.com
     docker compose up -d
 
-The Compose file binds **host loopback** 127.0.0.1:8787. Do not expose the Python HTTP server to the internet. Only configure remote access after a threat review and HTTPS reverse proxy, network protections and security testing. Container deployment has not been runtime tested in this conversation.
+The example publishes only to host loopback, 127.0.0.1:8787. It has no production HTTPS configuration. Do not bind to the public internet without independent security review and hardened ingress.
 
-## Test locally
+## Backup and verification
+
+    python -m calendar_app backup --output /secure/location/calendar-snapshot.sqlite3
+    python -m calendar_app verify-backup --input /secure/location/calendar-snapshot.sqlite3
+
+Both commands are local. Snapshots cannot silently overwrite an existing backup. The backup file is **not encrypted**. Verification checks database structure/integrity, **not** successful restoration. Protect data and test actual restores separately.
+
+## Development checks
 
     python -m unittest discover -s tests -v
-    python -m compileall -q calendar_app tests
+    python -m compileall -q calendar_app tests linux
     node --check web/app.js
 
-## Project structure
+CI runs Python HTTP tests, JavaScript syntax checks, GTK import checks and Android debug APK compilation. A passing build does not demonstrate production, visual, or real-device acceptance.
 
-- calendar_app — Python HTTP API, SQLite schema, local administrator CLI.
-- web — no-framework responsive web client and GC UI–guided semantic styling.
-- tests — SQLite-backed HTTP integration tests.
-- compose.yaml and Dockerfile — example local container deployment.
-- docs — planned feature boundaries, architecture and status.
-- .github/workflows — source checks.
+Native development instructions: [Linux GTK4](linux/README.md) and [Android](android/README.md).
 
-## Security
+## Architecture and license
 
-This project is an early preview, **not an audited calendar vault**. There is no TLS listener, login abuse-rate protection, encryption at rest, backup verification, identity federation, or multi-user calendar sharing. The web client uses sessionStorage for its bearer token. See SECURITY.md. No production deployment is claimed.
+- calendar_app: HTTP API, SQLite, auth, sharing, ICS, recurrence, backup.
+- web: dependency-free responsive interface guided by GoreeCloud UI.
+- linux: native GTK4 development client and per-user launcher.
+- android: native Java/Android project.
+- tests: isolated HTTP/SQLite tests.
+- docs: API and feature scope documentation.
 
-## License
+The five GoreeCloud MIPS (UI, Mesh, Identity, GoreeShield privacy and Wardveil cybersecurity) are governing integration targets, not yet verified runtime services in this implementation.
 
-MIT — see LICENSE. Third-party components, when later imported, require separate licensing and attribution review. No external calendar APIs are required by the present backend.
-
-## Backup a live SQLite database
-
-Run `python -m calendar_app backup --output /secure/location/calendar-backup.sqlite3` from a server shell. The backup uses SQLite online snapshots, checks structural integrity, and refuses to overwrite existing destinations. **The backup file is not encrypted:** keep it on protected storage and test restores in an isolated environment before relying on it.
-
-## Desktop/mobile development clients
-
-Native source is present under `linux/` (GTK4, per-user launcher) and `android/` (Java Android SDK). These are development clients, not released or runtime-accepted platforms. CI can compile the Android debug APK but that does not establish device compatibility or an approved APK delivery.
+Original repository source is [MIT licensed](LICENSE). Future third-party dependencies require independent security, license and attribution review.

@@ -1,36 +1,32 @@
-# GoreeCloud Calendar — Security
+# GoreeCloud Calendar — Security status
 
-## Development-preview warning
+## Preview warning
 
-Do not expose the Python HTTP listener directly to public or untrusted networks. Do not use this implementation as the only copy of valuable schedule data. This repository has not passed production security, recovery or release acceptance.
+This service is not a hardened internet-facing application. Do not expose the Python ThreadingHTTPServer to public or untrusted networks, or rely on it as the sole copy of important data.
 
-## Source controls present
+## Implemented source controls
 
-- Default bind to loopback; sample Compose publishes host loopback only.
-- Users must be created locally with the interactive administrative command.
-- Passwords are stored as salted scrypt KDF results; bearer tokens stored as SHA-256 digests.
-- API sessions expire after seven days and can be revoked.
-- User ID restrictions are applied to calendar, event, task and ICS operations.
-- Parameterized SQL queries, SQLite foreign keys and bounded JSON bodies.
-- Events require explicit timezone-aware timestamps and consistent chronological order.
-- Browser code uses textContent for dynamic event text, with restrictive Content Security Policy and no external script providers.
-- No user event descriptions or authentication headers are intentionally logged by the application.
+- Local account provisioning; no open self-registration.
+- Salted scrypt password hashing; random session tokens stored hashed and revoked on logout.
+- Calendar owner/read/edit membership authorization for events, tasks, search and ICS import/export.
+- Sharing available only to locally provisioned accounts; revocation requires calendar ownership.
+- Parameterized SQL, bounded JSON, validated timestamps, ICS size/event limits and explicit rejection of complex unsupported recurrence.
+- Default localhost binding; example container configuration uses a host loopback port.
+- Security response headers, restrictive Content Security Policy and no external browser JavaScript.
+- No mandatory telemetry or calendar provider.
+- Manual no-overwrite SQLite snapshots, structural integrity checks and separate backup verification.
 
-## Missing security controls
+## Important missing controls
 
-- No production ingress/TLS termination; HTTP is not safe for remote login.
-- No cross-process authentication rate limiting or account lockout.
-- No password reset, MFA or federated GoreeCloud Identity integration.
-- No encrypted storage, end-to-end encryption, secure sharing, or external-provider consent system.
-- No backup automation, integrity testing or restored-state validation.
-- No comprehensive network threat model, security testing, dependency provenance/SBOM or signed releases.
-- Python ThreadingHTTPServer is a development server, not a hardened internet-facing server.
-- Tokens in browser sessionStorage remain susceptible to compromise if XSS or a malicious browser extension occurs.
+- No production TLS listener or hardened HTTPS reverse proxy.
+- No login throttling, MFA, password recovery, production GoreeCloud Identity integration or device controls.
+- Sharing is **not end-to-end encrypted**. There is no free/busy-only mode or federation.
+- SQLite event text and backup snapshots are **not encrypted at rest**.
+- No automatic encrypted offsite backup, restore rehearsal or comprehensive disaster recovery.
+- Session tokens held in web sessionStorage remain vulnerable to XSS or malicious extensions.
+- No production threat-model review, attack simulation, security audit, signed release, deployment acceptance, or independent Android/Linux device security validation.
+- No complete GoreeShield policy engine or Wardveil service integration.
 
-## Recommendations before any remote deployment
+## Before remote deployment
 
-Use an authenticated, reviewed HTTPS reverse proxy, nonprivileged service runtime, protected storage, firewall, ingress request limits, credential rotation, reliable backups and disaster-recovery tests. Complete Wardveil threat review and GoreeShield privacy review. Review session lifecycle, audit logging, brute-force resistance and trusted reverse-proxy handling. Validate each actual deployment, not only source-code tests.
-
-Do not include secrets, event details, private database files or access tokens in public issues.
-
-A manual `python -m calendar_app backup --output ...` snapshot command exists. Its output is an **unencrypted** SQLite file; safeguard it and verify recovery. Automated encrypted backup and restore acceptance are outstanding.
+Perform appropriate GoreeShield privacy and Wardveil security reviews. Establish HTTPS ingress, firewall boundaries, abuse protection, encryption/storage controls, backups with restore verification, monitoring, dependency provenance and signed release practices. Test access revocation under concurrent clients. Do not publish private events or credentials in issues or logs.
