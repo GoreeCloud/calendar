@@ -367,6 +367,46 @@ class CalendarAPITests(unittest.TestCase):
         self.assertEqual(self.request("POST","/api/v1/import.ics",self.owner,
             {"calendar_id":cid,"ics":ics})[0],400)
 
+    def test_freebusy_role_redacts_calendar_events_tasks_and_search(self):
+        cid=self.calendar(self.owner)
+        status,created=self.request("POST","/api/v1/events",self.owner,{
+            "calendar_id":cid,"title":"Sensitive medical appointment",
+            "description":"Private notes","location":"Private address",
+            "start_at":"2026-11-10T16:00:00Z","end_at":"2026-11-10T17:00:00Z",
+            "reminder_minutes":15})
+        self.assertEqual(status,201,created)
+        self.assertEqual(self.request("POST","/api/v1/tasks",self.owner,
+            {"calendar_id":cid,"title":"Private task"})[0],201)
+        members="/api/v1/calendars/"+cid+"/members"
+        self.assertEqual(self.request("POST",members,self.owner,
+            {"email":"other@example.test","role":"freebusy"})[0],200)
+        calendars=self.request("GET","/api/v1/calendars",self.other)[1]["calendars"]
+        shared=next(c for c in calendars if c["id"]==cid)
+        self.assertEqual(shared["role"],"freebusy")
+        self.assertNotIn("description",shared)
+        self.assertNotIn("owner_id",shared)
+        qs="?start=2026-11-01T00:00:00Z&end=2026-12-01T00:00:00Z"
+        blocks=self.request("GET","/api/v1/events"+qs,self.other)[1]["events"]
+        self.assertEqual(len(blocks),1)
+        self.assertEqual(blocks[0]["title"],"Busy")
+        self.assertEqual(blocks[0]["description"],"")
+        self.assertEqual(blocks[0]["location"],"")
+        self.assertEqual(blocks[0]["start_at"],"2026-11-10T16:00:00Z")
+        self.assertIsNone(blocks[0]["reminder_minutes"])
+        self.assertNotIn("version",blocks[0])
+        self.assertNotIn(created["id"],str(blocks))
+        self.assertEqual(self.request("GET","/api/v1/tasks",self.other)[1]["tasks"],[])
+        self.assertEqual(self.request("GET","/api/v1/search?q=private",self.other)[1],
+                         {"events":[],"tasks":[]})
+        self.assertEqual(self.request("GET","/api/v1/export.ics?calendar_id="+cid,self.other)[0],403)
+        self.assertEqual(self.request("PATCH","/api/v1/events/"+created["id"],self.other,
+                         {"version":1,"title":"Guess"})[0],404)
+        self.assertEqual(self.request("POST",members,self.owner,
+                         {"email":"other@example.test","role":"read"})[0],200)
+        full=self.request("GET","/api/v1/events"+qs,self.other)[1]["events"][0]
+        self.assertEqual(full["title"],"Sensitive medical appointment")
+        self.assertEqual(full["reminder_minutes"],15)
+
     def test_logout_and_security_headers(self):
         self.assertEqual(self.request("GET","/api/v1/calendars")[0],401)
         self.assertEqual(self.request("POST","/api/v1/register",body={})[0],401)

@@ -48,7 +48,7 @@ CREATE INDEX IF NOT EXISTS idx_events_window ON events(calendar_id, start_at, en
 CREATE TABLE IF NOT EXISTS calendar_members (
   calendar_id TEXT NOT NULL REFERENCES calendars(id) ON DELETE CASCADE,
   user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  role TEXT NOT NULL CHECK(role IN ('read','edit')),
+  role TEXT NOT NULL CHECK(role IN ('read','edit','freebusy')),
   created_at TEXT NOT NULL,
   PRIMARY KEY(calendar_id,user_id)
 );
@@ -101,6 +101,24 @@ def init_database(path: str) -> None:
     target.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
     with database(path) as connection:
         connection.executescript(SCHEMA)
+        # Prior databases have a two-role CHECK; replace the narrow membership
+        # table transactionally without dropping existing permissions.
+        previous=connection.execute("SELECT sql FROM sqlite_master "
+            "WHERE type='table' AND name='calendar_members'").fetchone()[0]
+        if "'freebusy'" not in previous:
+            connection.execute("BEGIN IMMEDIATE")
+            connection.execute("ALTER TABLE calendar_members RENAME TO calendar_members_old")
+            connection.execute("CREATE TABLE calendar_members ("
+                "calendar_id TEXT NOT NULL REFERENCES calendars(id) ON DELETE CASCADE,"
+                "user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,"
+                "role TEXT NOT NULL CHECK(role IN ('read','edit','freebusy')),"
+                "created_at TEXT NOT NULL,"
+                "PRIMARY KEY(calendar_id,user_id))")
+            connection.execute("INSERT INTO calendar_members SELECT * FROM calendar_members_old")
+            connection.execute("DROP TABLE calendar_members_old")
+            connection.execute("CREATE INDEX IF NOT EXISTS idx_calendar_members_user "
+                               "ON calendar_members(user_id)")
+            connection.commit()
         connection.execute("PRAGMA journal_mode=WAL")
 
 def digest_password(password: str, salt: str) -> str:
@@ -322,7 +340,13 @@ class CalendarHandler(BaseHTTPRequestHandler):
                         "LEFT JOIN calendar_members m ON m.calendar_id=c.id AND m.user_id=? "
                         "WHERE c.owner_id=? OR m.user_id=? ORDER BY c.name,c.id",
                         (user,user,user,user))
-                    return self._send(200, {"calendars": [dict(r) for r in rows]})
+                    calendars=[]
+                    for row in rows:
+                        item=dict(row)
+                        if item["role"]=="freebusy":
+                            item={name:item[name] for name in ("id","name","color","role")}
+                        calendars.append(item)
+                    return self._send(200, {"calendars": calendars})
                 if method == "POST":
                     body = self._body()
                     if not set(body) <= {"name", "color", "description"}:
@@ -353,8 +377,8 @@ class CalendarHandler(BaseHTTPRequestHandler):
                         raise Failure(400,"Email and role required")
                     email=_text(body["email"],"email",320,True).casefold()
                     role=body["role"]
-                    if role not in ("read","edit"):
-                        raise Failure(400,"Role must be read or edit")
+                    if role not in ("read","edit","freebusy"):
+                        raise Failure(400,"Role must be freebusy, read or edit")
                     target=db.execute("SELECT id FROM users WHERE email=?", (email,)).fetchone()
                     if target is None:
                         raise Failure(404,"Calendar member account not found")
@@ -399,7 +423,7 @@ class CalendarHandler(BaseHTTPRequestHandler):
                 literal=query.replace("\\","\\\\").replace("%","\\%").replace("_","\\_")
                 pattern="%"+literal+"%"
                 condition="(c.owner_id=? OR EXISTS (SELECT 1 FROM calendar_members m " \
-                          "WHERE m.calendar_id=c.id AND m.user_id=?))"
+                          "WHERE m.calendar_id=c.id AND m.user_id=? AND m.role IN ('read','edit')))"
                 events=db.execute("SELECT e.* FROM events e JOIN calendars c ON e.calendar_id=c.id "
                     "WHERE "+condition+" AND (e.title LIKE ? ESCAPE '\\' OR e.description LIKE ? ESCAPE '\\' "
                     "OR e.location LIKE ? ESCAPE '\\') ORDER BY e.start_at LIMIT 50",
@@ -456,6 +480,18 @@ class CalendarHandler(BaseHTTPRequestHandler):
                             placeholders+")",series_ids)}
                         events=[event for event in events if (
                             event["id"],event.get("occurrence_start_at")) not in blocked]
+                    # Enforce the privacy boundary on serialized results,
+                    # including recurrence metadata and event identifiers.
+                    busy_calendars={r["calendar_id"] for r in db.execute(
+                        "SELECT calendar_id FROM calendar_members "
+                        "WHERE user_id=? AND role='freebusy'",(user,))}
+                    if busy_calendars:
+                        events=[{
+                            "id":"busy-"+secrets.token_hex(12),"calendar_id":e["calendar_id"],
+                            "title":"Busy","description":"","location":"",
+                            "start_at":e["start_at"],"end_at":e["end_at"],
+                            "all_day":e["all_day"],"reminder_minutes":None
+                        } if e["calendar_id"] in busy_calendars else e for e in events]
                     events.sort(key=lambda e: (e["start_at"], e["id"]))
                     return self._send(200, {"events": events})
                 if method == "POST":
@@ -582,7 +618,7 @@ class CalendarHandler(BaseHTTPRequestHandler):
                 if method == "GET":
                     rows = db.execute("SELECT t.* FROM tasks t JOIN calendars c ON t.calendar_id=c.id "
                                       "WHERE c.owner_id=? OR EXISTS (SELECT 1 FROM calendar_members m "
-                                      "WHERE m.calendar_id=c.id AND m.user_id=?) "
+                                      "WHERE m.calendar_id=c.id AND m.user_id=? AND m.role IN ('read','edit')) "
                                       "ORDER BY t.done,t.due_at,t.created_at LIMIT 501",
                                       (user,user)).fetchall()
                     if len(rows) > 500:
@@ -659,7 +695,9 @@ class CalendarHandler(BaseHTTPRequestHandler):
                 return self._send(201, {"imported": imported, "skipped": skipped})
             if path == "/api/v1/export.ics" and method == "GET":
                 cid = parse_qs(route.query).get("calendar_id", [None])[0]
-                self._accessible_calendar(db, user, cid or "")
+                access=self._accessible_calendar(db, user, cid or "")
+                if access["role"]=="freebusy":
+                    raise Failure(403,"Free/busy access cannot export event details")
                 entries = db.execute("SELECT e.*,r.rule_json,alarm.minutes_before AS reminder_minutes,"
                     "(SELECT m.external_uid FROM imported_uids m WHERE m.event_id=e.id "
                     "AND m.calendar_id=e.calendar_id LIMIT 1) AS original_uid "
