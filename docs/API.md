@@ -24,6 +24,7 @@ Use Authorization: Bearer TOKEN on every /api/v1 route except /login. JSON bodie
 | GET, POST | /api/v1/tasks | List and create tasks |
 | PATCH, DELETE | /api/v1/tasks/{id} | Write-authorized task update/delete |
 | GET | /api/v1/search?q={query} | Authorized event/task text search |
+| GET | /api/v1/availability?calendar_id={id}&start={iso}&end={iso} | Authenticated merged busy intervals (all sharing roles) |
 | POST | /api/v1/import.ics | Import supported iCalendar events |
 | GET | /api/v1/export.ics?calendar_id={id} | Export an accessible calendar |
 
@@ -48,3 +49,7 @@ GET /api/v1/search?q=TEXT uses a 2–100 character literal substring. SQL wildca
 ## Errors and boundaries
 
 JSON errors use a human-readable error field and relevant HTTP status. Authentication has an in-memory per-IP failed-login limit (10 attempts per five minutes), but there is no distributed production throttle or validated authentication/TLS gateway. No E2EE or externally compatible CalDAV server is claimed.
+
+## Availability
+
+GET /api/v1/availability requires calendar_id and timezone-aware start/end strings for a window no longer than 90 days. It returns merged, sorted UTC busy intervals clipped to the requested window. Recurrences and skipped dates are honored. The route accepts any locally authorized calendar role, including freebusy, and does not reveal titles, locations, event IDs, reminders, or tasks. It does not impose working hours, calculate travel buffers, publish availability publicly, or provide a booking page.

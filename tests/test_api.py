@@ -407,6 +407,47 @@ class CalendarAPITests(unittest.TestCase):
         self.assertEqual(full["title"],"Sensitive medical appointment")
         self.assertEqual(full["reminder_minutes"],15)
 
+    def test_availability_merges_intervals_and_redacts_event_details(self):
+        cid=self.calendar(self.owner)
+        self.assertEqual(self.request("POST","/api/v1/events",self.owner,{
+            "calendar_id":cid,"title":"Private appointment",
+            "description":"Sensitive details","start_at":"2026-11-10T16:00:00Z",
+            "end_at":"2026-11-10T17:00:00Z"})[0],201)
+        self.assertEqual(self.request("POST","/api/v1/events",self.owner,{
+            "calendar_id":cid,"title":"Overlapping event",
+            "start_at":"2026-11-10T16:30:00Z",
+            "end_at":"2026-11-10T18:00:00Z"})[0],201)
+        path=("/api/v1/availability?calendar_id="+cid+
+              "&start=2026-11-10T15:00:00Z&end=2026-11-10T19:00:00Z")
+        self.assertEqual(self.request("GET",path,self.other)[0],404)
+        self.assertEqual(self.request("GET",path)[0],401)
+        self.assertEqual(self.request("POST","/api/v1/calendars/"+cid+"/members",self.owner,
+            {"email":"other@example.test","role":"freebusy"})[0],200)
+        status,result=self.request("GET",path,self.other)
+        self.assertEqual(status,200,result)
+        self.assertEqual(result["busy"],[{
+            "start_at":"2026-11-10T16:00:00Z",
+            "end_at":"2026-11-10T18:00:00Z"}])
+        self.assertNotIn("Private appointment",str(result))
+        self.assertNotIn("Sensitive details",str(result))
+        self.assertEqual(self.request("GET","/api/v1/availability?calendar_id="+cid+
+            "&start=2026-01-01T00:00:00Z&end=2026-12-31T00:00:00Z",self.other)[0],400)
+
+    def test_availability_respects_recurrence_exclusions(self):
+        cid=self.calendar(self.owner)
+        status,created=self.request("POST","/api/v1/events",self.owner,{
+            "calendar_id":cid,"title":"Weekly",
+            "start_at":"2026-03-01T15:00:00Z","end_at":"2026-03-01T16:00:00Z",
+            "recurrence":{"freq":"WEEKLY","interval":1,"count":3,"tzid":"America/Chicago"}})
+        self.assertEqual(status,201)
+        self.assertEqual(self.request("POST","/api/v1/events/"+created["id"]+"/exclusions",self.owner,
+            {"occurrence_start_at":"2026-03-08T14:00:00Z","version":1})[0],200)
+        status,result=self.request("GET","/api/v1/availability?calendar_id="+cid+
+            "&start=2026-03-01T00:00:00Z&end=2026-03-22T00:00:00Z",self.owner)
+        self.assertEqual(status,200,result)
+        self.assertEqual([x["start_at"] for x in result["busy"]],
+                         ["2026-03-01T15:00:00Z","2026-03-15T14:00:00Z"])
+
     def test_logout_and_security_headers(self):
         self.assertEqual(self.request("GET","/api/v1/calendars")[0],401)
         self.assertEqual(self.request("POST","/api/v1/register",body={})[0],401)

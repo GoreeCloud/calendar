@@ -415,6 +415,48 @@ class CalendarHandler(BaseHTTPRequestHandler):
                            (name, color, desc, cid))
                 db.commit()
                 return self._send(200, {"ok": True})
+            if path == "/api/v1/availability" and method == "GET":
+                args=parse_qs(route.query)
+                cid=_text(args.get("calendar_id",[None])[0],"calendar_id",64,True)
+                # This endpoint is equally safe for owner, reader and free/busy
+                # roles: it serializes no event identities, descriptions or tasks.
+                self._accessible_calendar(db,user,cid)
+                start=_stamp(args.get("start",[None])[0])
+                end=_stamp(args.get("end",[None])[0])
+                lower=dt.datetime.fromisoformat(start.replace("Z","+00:00"))
+                upper=dt.datetime.fromisoformat(end.replace("Z","+00:00"))
+                if upper<=lower or upper-lower>dt.timedelta(days=90):
+                    raise Failure(400,"Availability window must be within 90 days")
+                single=db.execute("SELECT e.start_at,e.end_at FROM events e "
+                    "LEFT JOIN event_recurrence r ON r.event_id=e.id "
+                    "WHERE e.calendar_id=? AND r.event_id IS NULL "
+                    "AND e.start_at<? AND e.end_at>? LIMIT 501",(cid,end,start)).fetchall()
+                if len(single)>500:
+                    raise Failure(413,"Too many events for availability window")
+                events=[dict(row) for row in single]
+                recurring=db.execute("SELECT e.*,r.rule_json FROM events e "
+                    "JOIN event_recurrence r ON r.event_id=e.id "
+                    "WHERE e.calendar_id=? AND e.start_at<? LIMIT 501",(cid,end)).fetchall()
+                if len(recurring)>500:
+                    raise Failure(413,"Too many recurring series")
+                from .recurrence import expand,RecurrenceError
+                for record in recurring:
+                    event=dict(record)
+                    rule=json.loads(event.pop("rule_json"))
+                    exclusions={r["occurrence_at"] for r in db.execute(
+                        "SELECT occurrence_at FROM event_exclusions WHERE event_id=?",(event["id"],))}
+                    try:
+                        events.extend({
+                            "start_at":item["start_at"],"end_at":item["end_at"]
+                        } for item in expand(event,rule,lower,upper)
+                          if item["occurrence_start_at"] not in exclusions)
+                    except RecurrenceError:
+                        raise Failure(422,"Corrupt recurrence in availability window") from None
+                    if len(events)>500:
+                        raise Failure(413,"Too many events for availability window")
+                from .availability import busy_intervals
+                return self._send(200,{"calendar_id":cid,"start":start,"end":end,
+                    "busy":busy_intervals(events,start,end)})
             if path == "/api/v1/search" and method == "GET":
                 args=parse_qs(route.query)
                 query=args.get("q",[""])[0].strip()
