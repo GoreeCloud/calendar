@@ -29,7 +29,7 @@ Document status: Product requirements. This is not implementation evidence.
 
 ## Tasks, collaboration and communication
 
-- Task lists, subtasks, recurrence, due dates, priorities, completion, focus time and assignments.
+- Task lists, subtasks, recurrence, due dates, multiple priorities, completion, focus time and assignments. (Basic priority tiers and due-date filters are source-implemented; full task management parity remains planned.)
 - Event notes, memos, checklists, comments, reactions, meeting agendas and document attachments.
 - Calendar-specific reminders, email and push notifications and locally scheduled alerts.
 - No photo albums and no event photo-gallery feature.
@@ -52,3 +52,7 @@ Document status: Product requirements. This is not implementation evidence.
 ## Release policy
 
 A feature is implemented only after source, tests and its platform behavior justify that classification. Android APK and Linux installer must be built and tested independently. Self-hosted demo operation does not constitute production readiness.
+
+## Current preview boundary (November 10, 2026)
+
+Basic calendar metadata editing, private availability exploration, P1–P4 task priority, all-day/recurring events, free/busy-only sharing and ICS portability are implemented in source and tested by repository CI as applicable. This roadmap does not redefine those as pending; deeper scheduling automation, public booking pages, reminders that work after the browser closes, full CalDAV, encrypted offline clients, device acceptance, and production deployment remain planned. No photo albums.

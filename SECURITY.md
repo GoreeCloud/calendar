@@ -8,7 +8,7 @@ This service is not a hardened internet-facing application. Do not expose the Py
 
 - Local account provisioning; no open self-registration.
 - Salted scrypt password hashing; random session tokens stored hashed and revoked on logout. Process-local login throttling limits repeated incorrect credentials.
-- Calendar owner/edit/read/freebusy membership authorization for events, tasks, search and ICS import/export. Freebusy requests are projected to non-identifying occupied intervals; tasks, search results, event details and ICS export are withheld.
+- Calendar owner/edit/read/freebusy membership authorization for events, tasks, search, private availability and ICS import/export. Freebusy requests are projected to non-identifying occupied intervals; tasks, search results, event details and ICS export are withheld. Browser availability gaps are not published or offered as bookings.
 - Sharing available only to locally provisioned accounts; revocation requires calendar ownership.
 - Parameterized SQL, bounded JSON, validated timestamps, ICS size/event limits and explicit rejection of complex unsupported recurrence.
 - Default localhost binding; example container configuration uses a host loopback port.
@@ -30,3 +30,7 @@ This service is not a hardened internet-facing application. Do not expose the Py
 ## Before remote deployment
 
 Perform appropriate GoreeShield privacy and Wardveil security reviews. Establish HTTPS ingress, firewall boundaries, abuse protection, encryption/storage controls, backups with restore verification, monitoring, dependency provenance and signed release practices. Test access revocation under concurrent clients. Do not publish private events or credentials in issues or logs.
+
+## Preview UI and schema notes
+
+The browser uses only bundled same-origin scripts and CSS, with regression checks for unique DOM IDs, known selectors and local assets. These static checks are not interactive accessibility audits or penetration tests. The P1–P4 task priority migration adds a SQLite column with a normal default and preserves existing records; operators should still take a verified snapshot before upgrades. Calendar deletion is deliberately owner-only and irreversible without an external backup.

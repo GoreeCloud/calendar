@@ -21,8 +21,8 @@ Use Authorization: Bearer TOKEN on every /api/v1 route except /login. JSON bodie
 | PATCH, DELETE | /api/v1/events/{id} | Write-authorized event update/delete |
 | GET, POST | /api/v1/events/{id}/exclusions | List or skip individual dates in a recurring series (write role) |
 | DELETE | /api/v1/events/{id}/exclusions?occurrence_start_at={iso}&version={n} | Restore one previously skipped occurrence |
-| GET, POST | /api/v1/tasks | List and create tasks |
-| PATCH, DELETE | /api/v1/tasks/{id} | Write-authorized task update/delete |
+| GET, POST | /api/v1/tasks | List and create tasks (optional priority 1–4) |
+| PATCH, DELETE | /api/v1/tasks/{id} | Write-authorized task update/delete (including priority 1–4) |
 | GET | /api/v1/search?q={query} | Authorized event/task text search |
 | GET | /api/v1/availability?calendar_id={id}&start={iso}&end={iso} | Authenticated merged busy intervals (all sharing roles) |
 | POST | /api/v1/import.ics | Import supported iCalendar events |
@@ -53,3 +53,11 @@ JSON errors use a human-readable error field and relevant HTTP status. Authentic
 ## Availability
 
 GET /api/v1/availability requires calendar_id and timezone-aware start/end strings for a window no longer than 90 days. It returns merged, sorted UTC busy intervals clipped to the requested window. Recurrences and skipped dates are honored. The route accepts any locally authorized calendar role, including freebusy, and does not reveal titles, locations, event IDs, reminders, or tasks. It does not impose working hours, calculate travel buffers, publish availability publicly, or provide a booking page.
+
+## Task priorities
+
+Task creation supports optional integer `priority` with values 1 (urgent), 2 (high), 3 (normal default), and 4 (low). Task updates may change `priority`. Boolean and out-of-range values return HTTP 400. Existing database tasks are upgraded in place with the default priority 3; the migration preserves their IDs, ownership and due dates. Task filters for open, due today, overdue and completed are currently browser-side views of accessible tasks, not additional server query parameters.
+
+## Browser availability explorer
+
+The web application supplies an authenticated date-and-calendar selection interface on top of `/api/v1/availability`, showing occupied time alongside unscheduled gaps. It does not store or publish these gaps, and does not treat them as confirmed appointment openings. The availability API enforces the same calendar-membership rules as other calendar reads.
