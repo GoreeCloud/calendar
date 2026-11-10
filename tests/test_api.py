@@ -95,6 +95,38 @@ class CalendarAPITests(unittest.TestCase):
         invalid["end_at"]="2026-11-10T09:00:00Z"
         self.assertEqual(self.request("POST","/api/v1/events",self.owner,invalid)[0],400)
 
+    def test_ics_import_idempotent_and_timezone(self):
+        cid=self.calendar(self.owner)
+        body="\\r\\n".join([
+            "BEGIN:VCALENDAR","VERSION:2.0","BEGIN:VEVENT",
+            "UID:test-1@example.test","DTSTART;TZID=America/Chicago:20261110T090000",
+            "DTEND;TZID=America/Chicago:20261110T100000",
+            r"SUMMARY:Team\, planning","END:VEVENT","END:VCALENDAR",""])
+        # Convert escaped source markers to real iCalendar CRLF.
+        body=body.replace("\\r\\n","\r\n")
+        status,result=self.request("POST","/api/v1/import.ics",self.owner,
+                                    {"calendar_id":cid,"ics":body})
+        self.assertEqual(status,201,result)
+        self.assertEqual(result,{"imported":1,"skipped":0})
+        self.assertEqual(self.request("POST","/api/v1/import.ics",self.owner,
+                         {"calendar_id":cid,"ics":body})[1],{"imported":0,"skipped":1})
+        window="?start=2026-11-01T00:00:00Z&end=2026-12-01T00:00:00Z"
+        event=self.request("GET","/api/v1/events"+window,self.owner)[1]["events"][0]
+        self.assertEqual(event["start_at"],"2026-11-10T15:00:00Z")
+        self.assertEqual(event["title"],"Team, planning")
+        self.assertEqual(self.request("GET","/api/v1/events"+window,self.other)[1]["events"],[])
+
+    def test_ics_rejects_unsupported_recurrence_and_bad_dates(self):
+        cid=self.calendar(self.owner)
+        base="BEGIN:VCALENDAR\\nBEGIN:VEVENT\\nUID:a@b\\nDTSTART:20261110T090000Z\\nDTEND:20261110T100000Z\\nSUMMARY:Test\\n%sEND:VEVENT\\nEND:VCALENDAR\\n"
+        bad=base % "RRULE:FREQ=DAILY\\n"
+        status,result=self.request("POST","/api/v1/import.ics",self.owner,
+                                    {"calendar_id":cid,"ics":bad.replace("\\n","\n")})
+        self.assertEqual(status,400,result)
+        bad=base % ""
+        self.assertEqual(self.request("POST","/api/v1/import.ics",self.other,
+                         {"calendar_id":cid,"ics":bad.replace("\\n","\n")})[0],404)
+
     def test_logout_and_security_headers(self):
         self.assertEqual(self.request("GET","/api/v1/calendars")[0],401)
         self.assertEqual(self.request("POST","/api/v1/register",body={})[0],401)

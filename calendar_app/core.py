@@ -45,6 +45,12 @@ CREATE TABLE IF NOT EXISTS events (
   version INTEGER NOT NULL DEFAULT 1, created_at TEXT NOT NULL, updated_at TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_events_window ON events(calendar_id, start_at, end_at);
+CREATE TABLE IF NOT EXISTS imported_uids (
+  calendar_id TEXT NOT NULL REFERENCES calendars(id) ON DELETE CASCADE,
+  external_uid TEXT NOT NULL,
+  event_id TEXT NOT NULL REFERENCES events(id) ON DELETE CASCADE,
+  PRIMARY KEY (calendar_id, external_uid)
+);
 CREATE TABLE IF NOT EXISTS tasks (
   id TEXT PRIMARY KEY, calendar_id TEXT NOT NULL REFERENCES calendars(id) ON DELETE CASCADE,
   title TEXT NOT NULL, due_at TEXT, done INTEGER NOT NULL DEFAULT 0,
@@ -385,6 +391,33 @@ class CalendarHandler(BaseHTTPRequestHandler):
                            (title,int(done),due,now(),tid))
                 db.commit()
                 return self._send(200,{"ok":True})
+            if path == "/api/v1/import.ics" and method == "POST":
+                body = self._body()
+                if set(body) != {"calendar_id", "ics"}:
+                    raise Failure(400, "Calendar and ICS file content required")
+                cid = _text(body["calendar_id"], "calendar_id", 64, True)
+                self._owned_calendar(db, user, cid)
+                from .ical import parse_calendar, ImportErrorCalendar
+                try:
+                    events = parse_calendar(body["ics"])
+                except ImportErrorCalendar as error:
+                    raise Failure(400, str(error)) from None
+                db.execute("BEGIN IMMEDIATE")
+                imported, skipped = 0, 0
+                for entry in events:
+                    existing = db.execute("SELECT event_id FROM imported_uids "
+                        "WHERE calendar_id=? AND external_uid=?", (cid, entry["uid"])).fetchone()
+                    if existing is not None:
+                        skipped += 1
+                        continue
+                    eid = uuid.uuid4().hex
+                    db.execute("INSERT INTO events VALUES(?,?,?,?,?,?,?,?,?,?,?)",
+                        (eid, cid, entry["title"], entry["description"], entry["location"],
+                         entry["start_at"], entry["end_at"], int(entry["all_day"]), 1, now(), now()))
+                    db.execute("INSERT INTO imported_uids VALUES(?,?,?)", (cid, entry["uid"], eid))
+                    imported += 1
+                db.commit()
+                return self._send(201, {"imported": imported, "skipped": skipped})
             if path == "/api/v1/export.ics" and method == "GET":
                 cid = parse_qs(route.query).get("calendar_id", [None])[0]
                 self._owned_calendar(db, user, cid or "")

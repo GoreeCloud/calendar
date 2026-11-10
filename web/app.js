@@ -227,6 +227,18 @@ $("event-delete").addEventListener("click",async()=>{
   catch(error){toast(error.message);}
 });
 document.querySelectorAll("[data-close]").forEach(b=>b.addEventListener("click",()=>$(b.dataset.close).close()));
+$("import-btn").addEventListener("click",()=>$("import-file").click());
+$("import-file").addEventListener("change",async ()=>{
+  const input=$("import-file"),file=input.files?.[0];input.value="";
+  if(!file)return;
+  const cid=state.calendars.find(c=>!state.hidden.has(c.id))?.id;
+  if(!cid){toast("Choose a visible calendar to import into.");return;}
+  if(file.size>55000){toast("Import at most 55 KB and 100 events per file.");return;}
+  try{
+    const result=await api("/import.ics",{method:"POST",body:{calendar_id:cid,ics:await file.text()}});
+    await refresh();toast("Imported "+result.imported+" event(s); skipped "+result.skipped+" duplicate(s).");
+  }catch(error){toast(error.message);}
+});
 $("export-btn").addEventListener("click",exportCalendar);
 window.addEventListener("online",()=>{if(state.token)refresh();});
 start();
