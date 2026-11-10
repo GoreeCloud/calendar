@@ -45,6 +45,14 @@ CREATE TABLE IF NOT EXISTS events (
   version INTEGER NOT NULL DEFAULT 1, created_at TEXT NOT NULL, updated_at TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_events_window ON events(calendar_id, start_at, end_at);
+CREATE TABLE IF NOT EXISTS calendar_members (
+  calendar_id TEXT NOT NULL REFERENCES calendars(id) ON DELETE CASCADE,
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  role TEXT NOT NULL CHECK(role IN ('read','edit')),
+  created_at TEXT NOT NULL,
+  PRIMARY KEY(calendar_id,user_id)
+);
+CREATE INDEX IF NOT EXISTS idx_calendar_members_user ON calendar_members(user_id);
 CREATE TABLE IF NOT EXISTS event_recurrence (
   event_id TEXT PRIMARY KEY REFERENCES events(id) ON DELETE CASCADE,
   rule_json TEXT NOT NULL
@@ -211,10 +219,24 @@ class CalendarHandler(BaseHTTPRequestHandler):
             raise Failure(404, "Calendar not found")
         return row
 
+    def _accessible_calendar(self, db, user: str, cid: str, write: bool = False):
+        row = db.execute(
+            "SELECT c.*, CASE WHEN c.owner_id=? THEN 'owner' ELSE m.role END AS role "
+            "FROM calendars c LEFT JOIN calendar_members m ON m.calendar_id=c.id AND m.user_id=? "
+            "WHERE c.id=? AND (c.owner_id=? OR m.user_id=?)",
+            (user,user,cid,user,user)).fetchone()
+        if row is None:
+            raise Failure(404, "Calendar not found")
+        if write and row["role"] not in ("owner","edit"):
+            raise Failure(403, "This calendar is read-only")
+        return row
+
     def _owned_item(self, db, table: str, user: str, item_id: str):
         row = db.execute(
             f"SELECT item.* FROM {table} item JOIN calendars c ON item.calendar_id=c.id "
-            "WHERE item.id=? AND c.owner_id=?", (item_id, user)).fetchone()
+            "WHERE item.id=? AND (c.owner_id=? OR EXISTS "
+            "(SELECT 1 FROM calendar_members m WHERE m.calendar_id=c.id "
+            "AND m.user_id=? AND m.role='edit'))", (item_id, user,user)).fetchone()
         if row is None:
             raise Failure(404, "Item not found")
         return row
@@ -268,7 +290,11 @@ class CalendarHandler(BaseHTTPRequestHandler):
                 return self._send(200, {"ok": True})
             if path == "/api/v1/calendars":
                 if method == "GET":
-                    rows = db.execute("SELECT * FROM calendars WHERE owner_id=? ORDER BY name,id", (user,))
+                    rows = db.execute("SELECT c.*, CASE WHEN c.owner_id=? THEN 'owner' "
+                        "ELSE m.role END AS role FROM calendars c "
+                        "LEFT JOIN calendar_members m ON m.calendar_id=c.id AND m.user_id=? "
+                        "WHERE c.owner_id=? OR m.user_id=? ORDER BY c.name,c.id",
+                        (user,user,user,user))
                     return self._send(200, {"calendars": [dict(r) for r in rows]})
                 if method == "POST":
                     body = self._body()
@@ -284,6 +310,41 @@ class CalendarHandler(BaseHTTPRequestHandler):
                                (cid, user, name, color, desc, now()))
                     db.commit()
                     return self._send(201, {"id": cid})
+            if path.startswith("/api/v1/calendars/") and "/members" in path:
+                tail=path[len("/api/v1/calendars/"):].split("/")
+                if len(tail) not in (2,3) or tail[1] != "members":
+                    raise Failure(404, "Not found")
+                cid=tail[0]
+                self._owned_calendar(db, user, cid)
+                if len(tail)==2 and method=="GET":
+                    rows=db.execute("SELECT m.user_id,u.email,m.role FROM calendar_members m "
+                        "JOIN users u ON u.id=m.user_id WHERE m.calendar_id=? ORDER BY u.email", (cid,))
+                    return self._send(200, {"members":[dict(m) for m in rows]})
+                if len(tail)==2 and method=="POST":
+                    body=self._body()
+                    if set(body)!={"email","role"}:
+                        raise Failure(400,"Email and role required")
+                    email=_text(body["email"],"email",320,True).casefold()
+                    role=body["role"]
+                    if role not in ("read","edit"):
+                        raise Failure(400,"Role must be read or edit")
+                    target=db.execute("SELECT id FROM users WHERE email=?", (email,)).fetchone()
+                    if target is None:
+                        raise Failure(404,"Calendar member account not found")
+                    if target["id"]==user:
+                        raise Failure(400,"The owner already controls the calendar")
+                    db.execute("INSERT INTO calendar_members VALUES(?,?,?,?) "
+                        "ON CONFLICT(calendar_id,user_id) DO UPDATE SET role=excluded.role",
+                        (cid,target["id"],role,now()))
+                    db.commit()
+                    return self._send(200,{"ok":True})
+                if len(tail)==3 and method=="DELETE":
+                    target_id=tail[2]
+                    db.execute("DELETE FROM calendar_members WHERE calendar_id=? AND user_id=?",
+                               (cid,target_id))
+                    db.commit()
+                    return self._send(200,{"ok":True})
+                raise Failure(404,"Not found")
             if path.startswith("/api/v1/calendars/") and method in ("PATCH", "DELETE"):
                 cid = path.rsplit("/", 1)[-1]
                 old = self._owned_calendar(db, user, cid)
@@ -313,13 +374,17 @@ class CalendarHandler(BaseHTTPRequestHandler):
                         raise Failure(400, "Invalid query window")
                     rows = db.execute("SELECT e.* FROM events e JOIN calendars c ON e.calendar_id=c.id "
                         "LEFT JOIN event_recurrence r ON r.event_id=e.id "
-                        "WHERE c.owner_id=? AND e.start_at<? AND e.end_at>? AND r.event_id IS NULL "
-                        "ORDER BY e.start_at LIMIT 501", (user, end, start)).fetchall()
+                        "WHERE (c.owner_id=? OR EXISTS (SELECT 1 FROM calendar_members m "
+                        "WHERE m.calendar_id=c.id AND m.user_id=?)) "
+                        "AND e.start_at<? AND e.end_at>? AND r.event_id IS NULL "
+                        "ORDER BY e.start_at LIMIT 501", (user, user, end, start)).fetchall()
                     events = [dict(r) for r in rows]
                     recurring = db.execute("SELECT e.*, r.rule_json FROM events e "
                         "JOIN calendars c ON e.calendar_id=c.id "
                         "JOIN event_recurrence r ON r.event_id=e.id "
-                        "WHERE c.owner_id=? AND e.start_at<? LIMIT 501", (user, end)).fetchall()
+                        "WHERE (c.owner_id=? OR EXISTS (SELECT 1 FROM calendar_members m "
+                        "WHERE m.calendar_id=c.id AND m.user_id=?)) "
+                        "AND e.start_at<? LIMIT 501", (user,user,end)).fetchall()
                     if len(recurring)>500:
                         raise Failure(413, "Too many recurring series")
                     from .recurrence import expand, RecurrenceError
@@ -344,7 +409,7 @@ class CalendarHandler(BaseHTTPRequestHandler):
                     except RecurrenceError as error:
                         raise Failure(400,str(error)) from None
                     cid = _text(payload.get("calendar_id"), "calendar_id", 64, True)
-                    self._owned_calendar(db, user, cid)
+                    self._accessible_calendar(db, user, cid, write=True)
                     title, desc, location, start, end, all_day = _event_values(payload)
                     eid = uuid.uuid4().hex
                     db.execute("INSERT INTO events VALUES(?,?,?,?,?,?,?,?,?,?,?)",
@@ -377,7 +442,7 @@ class CalendarHandler(BaseHTTPRequestHandler):
                 merged.update(payload)
                 merged["all_day"] = bool(merged["all_day"]) if type(merged["all_day"]) is int else merged["all_day"]
                 cid = _text(merged.get("calendar_id"), "calendar_id", 64, True)
-                self._owned_calendar(db, user, cid)
+                self._accessible_calendar(db, user, cid, write=True)
                 title, desc, location, start, end, all_day = _event_values(merged)
                 changed = db.execute("UPDATE events SET calendar_id=?,title=?,description=?,"
                     "location=?,start_at=?,end_at=?,all_day=?,version=version+1,updated_at=? "
@@ -393,8 +458,10 @@ class CalendarHandler(BaseHTTPRequestHandler):
             if path == "/api/v1/tasks":
                 if method == "GET":
                     rows = db.execute("SELECT t.* FROM tasks t JOIN calendars c ON t.calendar_id=c.id "
-                                      "WHERE c.owner_id=? ORDER BY t.done,t.due_at,t.created_at LIMIT 501",
-                                      (user,)).fetchall()
+                                      "WHERE c.owner_id=? OR EXISTS (SELECT 1 FROM calendar_members m "
+                                      "WHERE m.calendar_id=c.id AND m.user_id=?) "
+                                      "ORDER BY t.done,t.due_at,t.created_at LIMIT 501",
+                                      (user,user)).fetchall()
                     if len(rows) > 500:
                         raise Failure(413, "Too many tasks")
                     return self._send(200, {"tasks": [dict(r) for r in rows]})
@@ -403,7 +470,7 @@ class CalendarHandler(BaseHTTPRequestHandler):
                     if not set(body) <= {"calendar_id", "title", "due_at"}:
                         raise Failure(400, "Unknown task fields")
                     cid = _text(body.get("calendar_id"), "calendar_id", 64, True)
-                    self._owned_calendar(db, user, cid)
+                    self._accessible_calendar(db, user, cid, write=True)
                     title = _text(body.get("title"), "title", 160, True)
                     due = _stamp(body["due_at"]) if body.get("due_at") else None
                     tid = uuid.uuid4().hex
@@ -436,7 +503,7 @@ class CalendarHandler(BaseHTTPRequestHandler):
                 if set(body) != {"calendar_id", "ics"}:
                     raise Failure(400, "Calendar and ICS file content required")
                 cid = _text(body["calendar_id"], "calendar_id", 64, True)
-                self._owned_calendar(db, user, cid)
+                self._accessible_calendar(db, user, cid, write=True)
                 from .ical import parse_calendar, ImportErrorCalendar
                 try:
                     events = parse_calendar(body["ics"])
@@ -460,7 +527,7 @@ class CalendarHandler(BaseHTTPRequestHandler):
                 return self._send(201, {"imported": imported, "skipped": skipped})
             if path == "/api/v1/export.ics" and method == "GET":
                 cid = parse_qs(route.query).get("calendar_id", [None])[0]
-                self._owned_calendar(db, user, cid or "")
+                self._accessible_calendar(db, user, cid or "")
                 entries = db.execute("SELECT * FROM events WHERE calendar_id=? ORDER BY start_at", (cid,))
                 lines = ["BEGIN:VCALENDAR","VERSION:2.0","PRODID:-//GoreeCloud//Calendar//EN"]
                 for event in entries:

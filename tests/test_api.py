@@ -163,6 +163,41 @@ class CalendarAPITests(unittest.TestCase):
         self.assertEqual([e["start_at"][:10] for e in events],
                          ["2026-01-31","2026-03-31","2026-05-31"][:len(events)])
 
+    def test_sharing_enforces_read_edit_and_revocation(self):
+        cid=self.calendar(self.owner)
+        status,data=self.request("POST","/api/v1/events",self.owner,
+            {"calendar_id":cid,"title":"Shared planning",
+             "start_at":"2026-11-10T16:00:00Z","end_at":"2026-11-10T17:00:00Z"})
+        self.assertEqual(status,201,data)
+        eid=data["id"]
+        members="/api/v1/calendars/"+cid+"/members"
+        self.assertEqual(self.request("POST",members,self.other,
+            {"email":"other@example.test","role":"edit"})[0],404)
+        status,result=self.request("POST",members,self.owner,
+            {"email":"other@example.test","role":"read"})
+        self.assertEqual(status,200,result)
+        status,other_calendars=self.request("GET","/api/v1/calendars",self.other)
+        self.assertEqual(status,200)
+        shared=[c for c in other_calendars["calendars"] if c["id"]==cid]
+        self.assertEqual(len(shared),1)
+        self.assertEqual(shared[0]["role"],"read")
+        q="?start=2026-11-01T00:00:00Z&end=2026-12-01T00:00:00Z"
+        self.assertEqual(len(self.request("GET","/api/v1/events"+q,self.other)[1]["events"]),1)
+        self.assertEqual(self.request("POST","/api/v1/events",self.other,
+            {"calendar_id":cid,"title":"Forbidden",
+             "start_at":"2026-11-10T18:00:00Z","end_at":"2026-11-10T19:00:00Z"})[0],403)
+        self.assertEqual(self.request("PATCH","/api/v1/events/"+eid,self.other,
+            {"version":1,"title":"Forbidden"})[0],404)
+        self.assertEqual(self.request("POST",members,self.owner,
+            {"email":"other@example.test","role":"edit"})[0],200)
+        self.assertEqual(self.request("PATCH","/api/v1/events/"+eid,self.other,
+            {"version":1,"title":"Shared update"})[0],200)
+        member=self.request("GET",members,self.owner)[1]["members"][0]
+        self.assertEqual(member["role"],"edit")
+        self.assertEqual(self.request("DELETE",members+"/"+member["user_id"],self.owner)[0],200)
+        self.assertFalse(any(c["id"]==cid for c in self.request("GET","/api/v1/calendars",self.other)[1]["calendars"]))
+        self.assertEqual(self.request("GET","/api/v1/events"+q,self.other)[1]["events"],[])
+
     def test_logout_and_security_headers(self):
         self.assertEqual(self.request("GET","/api/v1/calendars")[0],401)
         self.assertEqual(self.request("POST","/api/v1/register",body={})[0],401)
