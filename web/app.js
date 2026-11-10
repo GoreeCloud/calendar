@@ -73,12 +73,15 @@ function visibleEvents(){return state.events.filter(e=>!state.hidden.has(e.calen
 function colorFor(id){return state.calendars.find(c=>c.id===id)?.color||"#6475de";}
 function eventChip(event){
   const b=el("button","event-pill",event.title);b.type="button";b.style.borderLeftColor=colorFor(event.calendar_id);
-  b.title=event.title+" • "+timeText(event.start_at);b.addEventListener("click",e=>{e.stopPropagation();openEvent(event);});
+  b.title=event.title+" • "+(event.all_day?"All day":timeText(event.start_at));b.addEventListener("click",e=>{e.stopPropagation();openEvent(event);});
   return b;
 }
 function eventsOn(date) {
-  const from=byDay(date).getTime(),until=addDays(date,1).getTime();
-  return visibleEvents().filter(e=>new Date(e.start_at).getTime()<until&&new Date(e.end_at).getTime()>from);
+  const key=dateKey(date),from=byDay(date).getTime(),until=addDays(date,1).getTime();
+  return visibleEvents().filter(e=>{
+    if(e.all_day)return e.start_at.slice(0,10)<=key && e.end_at.slice(0,10)>key;
+    return new Date(e.start_at).getTime()<until && new Date(e.end_at).getTime()>from;
+  });
 }
 function setHeader(){
   const date=state.anchor,format=new Intl.DateTimeFormat(undefined,{month:"long",year:"numeric"});
@@ -127,7 +130,7 @@ function renderAgenda(){
     const section=el("section","agenda-section");section.append(el("h2","agenda-heading",fullDate(d)));
     events.forEach(e=>{
       const row=el("button","agenda-row");const mark=el("span","agenda-mark");mark.style.background=colorFor(e.calendar_id);
-      const content=el("span");content.append(el("strong",null,e.title),el("small",null,timeText(e.start_at)+" – "+timeText(e.end_at)+(e.location?" · "+e.location:"")));
+      const content=el("span");content.append(el("strong",null,e.title),el("small",null,(e.all_day?"All day":timeText(e.start_at)+" – "+timeText(e.end_at))+(e.location?" · "+e.location:"")));
       row.append(mark,content);row.addEventListener("click",()=>openEvent(e));section.append(row);added++;
     });root.append(section);
   }
@@ -160,7 +163,9 @@ function openEvent(event=null,date=new Date()){
   $("event-title").value=event?.title||"";
   let start=event?new Date(event.start_at):new Date(date.getFullYear(),date.getMonth(),date.getDate(),9,0);
   let end=event?new Date(event.end_at):new Date(start.getTime()+60*60*1000);
-  $("event-start").value=localField(start);$("event-end").value=localField(end);
+  $("event-start").value=event?.all_day?event.start_at.slice(0,10)+"T00:00":localField(start);
+  $("event-end").value=event?.all_day?event.end_at.slice(0,10)+"T00:00":localField(end);
+  $("event-all-day").checked=Boolean(event?.all_day);
   $("event-calendar").value=event?.calendar_id||state.calendars[0]?.id||"";
   $("event-location").value=event?.location||"";
   $("event-description").value=event?.description||"";
@@ -172,11 +177,27 @@ function openTask(){
 }
 async function saveEvent(evt){
   evt.preventDefault();
-  const start=new Date($("event-start").value),end=new Date($("event-end").value);
-  if(!(end>start)){toast("End time must be after start time.");return;}
+  const allDay=$("event-all-day").checked;
+  const startLocal=$("event-start").value,endLocal=$("event-end").value;
+  if(!startLocal||!endLocal){toast("Choose valid start and end dates.");return;}
+  let start,end;
+  if(allDay){
+    const date=startLocal.slice(0,10);
+    let endDate=endLocal.slice(0,10);
+    if(endDate<=date){
+      const next=new Date(date+"T00:00:00Z");next.setUTCDate(next.getUTCDate()+1);
+      endDate=next.toISOString().slice(0,10);
+    }
+    start=new Date(date+"T00:00:00Z");end=new Date(endDate+"T00:00:00Z");
+  }else{
+    start=new Date(startLocal);end=new Date(endLocal);
+  }
+  if(!Number.isFinite(start.getTime())||!Number.isFinite(end.getTime())||!(end>start)){
+    toast("End time must be after start time.");return;
+  }
   const body={title:$("event-title").value,calendar_id:$("event-calendar").value,
     description:$("event-description").value,location:$("event-location").value,
-    start_at:start.toISOString(),end_at:end.toISOString(),all_day:false};
+    start_at:start.toISOString(),end_at:end.toISOString(),all_day:allDay};
   try{
     if(state.editing){body.version=state.editing.version;await api("/events/"+state.editing.id,{method:"PATCH",body});}
     else await api("/events",{method:"POST",body});

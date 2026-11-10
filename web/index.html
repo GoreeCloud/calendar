@@ -69,6 +69,7 @@
     <form id="event-form">
       <div class="dialog-heading"><div><span class="eyebrow">SCHEDULE</span><h2 id="event-dialog-title">New event</h2></div><button type="button" class="icon-btn" data-close="event-dialog" aria-label="Close">✕</button></div>
       <label for="event-title">Event name</label><input id="event-title" maxlength="160" required placeholder="What's on your calendar?">
+      <label class="all-day-option" for="event-all-day"><input type="checkbox" id="event-all-day"> All-day event</label>
       <div class="two-fields"><div><label for="event-start">Starts</label><input id="event-start" type="datetime-local" required></div><div><label for="event-end">Ends</label><input id="event-end" type="datetime-local" required></div></div>
       <label for="event-calendar">Calendar</label><select id="event-calendar" required></select>
       <label for="event-location">Location</label><input id="event-location" maxlength="500" placeholder="Add a location">
