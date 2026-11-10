@@ -52,7 +52,7 @@
         <div class="headline"><p class="eyebrow">YOUR SCHEDULE</p><h1 id="period-title">Calendar</h1></div>
         <div class="top-actions"><button id="mobile-calendars" class="icon-btn mobile-only" title="Calendar settings" aria-label="Manage calendars">▣</button><button id="mobile-new-calendar" class="icon-btn mobile-only" title="New calendar" aria-label="New calendar">＋</button><button id="mobile-signout" class="icon-btn mobile-only" title="Sign out" aria-label="Sign out">↪</button><span id="sync-state" class="sync-status" role="status">● Connected</span><button id="today-btn" class="secondary">Today</button><div class="stepper"><button id="prev-btn" aria-label="Previous period">‹</button><button id="next-btn" aria-label="Next period">›</button></div></div>
       </header>
-      <div class="toolbar"><div class="toolbar-caption" id="toolbar-caption">Your time, organized.</div><div class="toolbar-actions"><button id="enable-alerts" class="icon-btn" type="button" title="Enable browser reminders while Calendar is open" aria-label="Enable browser reminders">♢</button><button id="search-btn" class="secondary search-action">⌕ Search</button><button id="import-btn" class="secondary">↑ Import .ics</button><input type="file" id="import-file" accept=".ics,text/calendar" hidden><button id="export-btn" class="secondary">↓ Export calendar</button><button class="primary small-primary" id="toolbar-create">＋ Event</button></div></div>
+      <div class="toolbar"><div class="toolbar-caption" id="toolbar-caption">Your time, organized.</div><div class="toolbar-actions"><button id="enable-alerts" class="icon-btn" type="button" title="Enable browser reminders while Calendar is open" aria-label="Enable browser reminders">♢</button><button id="availability-btn" class="secondary" type="button">◷ Availability</button><button id="search-btn" class="secondary search-action">⌕ Search</button><button id="import-btn" class="secondary">↑ Import .ics</button><input type="file" id="import-file" accept=".ics,text/calendar" hidden><button id="export-btn" class="secondary">↓ Export calendar</button><button class="primary small-primary" id="toolbar-create">＋ Event</button></div></div>
       <main id="main-view" tabindex="-1" aria-live="polite"><div class="skeleton" aria-hidden="true"></div></main>
     </div>
     <nav id="mobile-nav" class="mobile-dock" aria-label="Mobile navigation">
@@ -99,6 +99,18 @@
     <p class="muted">Show or hide calendars, and manage access to calendars you own.</p>
     <div id="mobile-calendar-list" class="calendar-list"></div>
     <div class="dialog-actions"><button type="button" class="secondary" data-close="calendars-dialog">Done</button></div>
+  </dialog>
+  <dialog id="availability-dialog" class="editor-dialog">
+    <div class="dialog-heading"><div><span class="eyebrow">YOUR SCHEDULE</span><h2>Availability</h2></div><button type="button" class="icon-btn" data-close="availability-dialog" aria-label="Close">✕</button></div>
+    <p class="muted">See occupied intervals on a calendar you can access. This is not a public booking link or a guarantee that unscheduled time is available.</p>
+    <form id="availability-form">
+      <label for="availability-calendar">Calendar</label>
+      <select id="availability-calendar" required></select>
+      <label for="availability-date">Date</label>
+      <input type="date" id="availability-date" required>
+      <div class="dialog-actions"><button class="primary" type="submit">View time blocks</button></div>
+    </form>
+    <div id="availability-results" class="availability-results" aria-live="polite" aria-atomic="true"></div>
   </dialog>
   <dialog id="search-dialog" class="editor-dialog">
     <div class="dialog-heading"><div><span class="eyebrow">FIND SOMETHING</span><h2>Search calendar</h2></div><button type="button" class="icon-btn" data-close="search-dialog" aria-label="Close">✕</button></div>

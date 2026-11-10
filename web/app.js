@@ -467,6 +467,72 @@ $("enable-alerts").addEventListener("click",async()=>{
   }catch{toast("Browser alerts are not available in this context.");}
 });
 setInterval(checkLiveReminders,30000);
+let availabilityRequest=0;
+function availabilityDay(value){
+  if(!/^\d{4}-\d\d-\d\d$/.test(value))throw new Error("Choose a valid date.");
+  const [year,month,day]=value.split("-").map(Number);
+  const start=new Date(year,month-1,day);
+  if(dateKey(start)!==value)throw new Error("Choose a valid calendar date.");
+  const end=new Date(year,month-1,day+1);
+  return {start,end};
+}
+function availabilityClock(value){
+  return new Intl.DateTimeFormat(undefined,{hour:"numeric",minute:"2-digit",timeZoneName:"short"}).format(new Date(value));
+}
+function availabilitySegments(intervals,start,end){
+  const slots=[],lower=start.getTime(),upper=end.getTime();
+  let cursor=lower;
+  for(const item of intervals){
+    const begin=Math.max(lower,Date.parse(item.start_at));
+    const finish=Math.min(upper,Date.parse(item.end_at));
+    if(!Number.isFinite(begin)||!Number.isFinite(finish)||finish<=begin)continue;
+    if(begin>cursor)slots.push({kind:"free",start:cursor,end:begin});
+    if(finish>cursor)slots.push({kind:"busy",start:Math.max(begin,cursor),end:finish});
+    cursor=Math.max(cursor,finish);
+  }
+  if(cursor<upper)slots.push({kind:"free",start:cursor,end:upper});
+  return slots;
+}
+function showAvailability(data,start,end){
+  const root=$("availability-results");root.replaceChildren();
+  const summary=el("p","availability-summary",data.busy.length+
+    (data.busy.length===1?" occupied interval":" occupied intervals")+" on this date");
+  const list=el("ul","availability-intervals");
+  for(const slot of availabilitySegments(data.busy,start,end)){
+    const li=el("li","availability-interval "+slot.kind);
+    const label=el("strong",null,slot.kind==="busy"?"Busy":"Unscheduled");
+    const times=el("span",null,availabilityClock(slot.start)+" – "+availabilityClock(slot.end));
+    li.append(label,times);list.append(li);
+  }
+  root.append(summary,list);
+}
+$("availability-btn").addEventListener("click",()=>{
+  const select=$("availability-calendar");select.replaceChildren();
+  for(const calendar of state.calendars){
+    const option=el("option",null,calendar.name+" ("+
+      (calendar.role==="freebusy"?"free/busy":calendar.role==="read"?"read-only":calendar.role)+")");
+    option.value=calendar.id;select.append(option);
+  }
+  if(!state.calendars.length){toast("No calendars are accessible.");return;}
+  select.value=state.calendars.find(c=>!state.hidden.has(c.id))?.id||state.calendars[0].id;
+  $("availability-date").value=dateKey(state.anchor);
+  $("availability-results").replaceChildren();
+  $("availability-dialog").showModal();
+});
+$("availability-form").addEventListener("submit",async event=>{
+  event.preventDefault();
+  const cid=$("availability-calendar").value,seq=++availabilityRequest;
+  const root=$("availability-results");root.replaceChildren(el("p","muted","Checking availability…"));
+  try{
+    const {start,end}=availabilityDay($("availability-date").value);
+    const query=new URLSearchParams({calendar_id:cid,start:start.toISOString(),end:end.toISOString()});
+    const result=await api("/availability?"+query);
+    if(seq!==availabilityRequest||!$("availability-dialog").open)return;
+    showAvailability(result,start,end);
+  }catch(error){
+    if(seq===availabilityRequest)root.replaceChildren(el("p","error",error.message));
+  }
+});
 $("search-btn").addEventListener("click",()=>{
   $("search-query").value="";$("search-results").replaceChildren();
   $("search-dialog").showModal();$("search-query").focus();

@@ -194,3 +194,14 @@ nav#desktop-nav{display:flex;flex-direction:column;gap:5px}
 .search-result:hover{background:var(--gc-surface-tonal)}
 .search-result small{color:var(--gc-text-soft)}
 @media(max-width:760px){.toolbar-actions .search-action{display:inline-flex}}
+
+/* Availability displays only occupied/unscheduled time, never event details. */
+.availability-results{margin-top:20px}
+.availability-summary{font-size:13px;color:var(--gc-text-soft);font-weight:700}
+.availability-intervals{list-style:none;display:flex;flex-direction:column;gap:9px;margin:0;padding:0}
+.availability-interval{border:1px solid var(--gc-outline);border-radius:13px;padding:12px 14px;display:flex;align-items:center;justify-content:space-between;gap:12px;background:var(--gc-surface-tonal)}
+.availability-interval strong{font-size:13px}
+.availability-interval span{font-size:13px;text-align:right;font-variant-numeric:tabular-nums}
+.availability-interval.busy{border-left:4px solid var(--gc-negative)}
+.availability-interval.free{border-left:4px solid var(--gc-positive)}
+@media(max-width:520px){.availability-interval{align-items:flex-start;flex-direction:column}.availability-interval span{text-align:left}}
