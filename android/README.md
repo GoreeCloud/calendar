@@ -6,7 +6,7 @@ runtime APIs, and no third-party Android UI libraries. It implements:
 - Native login screen, HTTPS server validation, in-memory bearer session.
 - Native agenda view with a date picker and upcoming daily events.
 - Create one-hour events with an Android time picker, optionally adding a 15-minute reminder setting.
-- Native task list, task completion toggles and task creation.
+- Native task list, read-only-aware task completion toggles, priority display, and task creation with P1–P4 selection.
 - Logout and automatic refresh through the self-hosted API.
 
 A real Android debug APK build and device-level validation are required before

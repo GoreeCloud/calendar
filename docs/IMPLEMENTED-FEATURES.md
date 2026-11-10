@@ -5,13 +5,13 @@
 ## Backend
 
 - Python 3.11+ HTTP API and SQLite storage.
-- Locally created accounts, salted scrypt hashes, revocable bearer sessions.
+- Locally created accounts, salted scrypt hashes, revocable bearer sessions, self-service password rotation, active session counts and revoke-other-sessions action. A concurrent-login regression checks rotation invalidation.
 - Multiple personal calendars and owner/edit/read/freebusy memberships, revocation and privacy-preserving busy interval projections.
 - Event CRUD, timezone validation, all-day events, optimistic version conflicts.
 - Bounded daily/weekly/monthly/yearly recurrence and timezone-aware expansion; skip/restore of exact occurrences with series version conflicts.
 - Task creation, reading, completion, updates, deletion and P1–P4 priorities, with lossless schema upgrade for existing tasks.
-- Permission-scoped search across event text and tasks; bounded authenticated availability API returning merged UTC intervals from events and recurrences.
-- ICS import/export with IANA timezone, all-day dates, bounded recurrence, UID deduplication, EXDATE exclusions and one supported display VALARM.
+- Permission-scoped search across event text and tasks; bounded authenticated availability API returning merged UTC intervals from events and recurrences; private meeting-time suggestions across up to five accessible calendars.
+- ICS import/export with IANA timezone, all-day dates, bounded recurrence, UID deduplication, EXDATE exclusions and one supported display VALARM. Bounded owner-only JSON portability exports include tasks and exclude account/session secrets.
 - Online no-clobber SQLite snapshots, independent structural and foreign-key verification, and no-overwrite restore to a NEW database file, tested with calendar event and task recovery.
 - Local-loopback server default and example Docker Compose.
 
@@ -19,15 +19,15 @@
 
 - Login/logout, month/week/agenda/tasks, calendar visibility.
 - Event creation/editing, all-day and recurring series editor, reminder offsets, skipped-date manager and browser alerts while the app tab is open.
-- Task management, P1–P4 priority selection and filters (open/today/overdue/completed/all), ICS import/export, text search, and a date-based private availability explorer.
+- Task management, P1–P4 priority selection and filters (open/today/overdue/completed/all), ICS import/export, private JSON downloads, text search, date-based availability exploration, and private meeting-time suggestions.
 - Owner-managed calendar sharing with local users, member removal and free/busy-only visibility; owner-only rename, recolor, description and deletion controls.
 - Mobile calendar switcher, read-only shared-calendar presentation and responsive floating navigation dock.
 - Light/dark system appearance, accessible labels and text-first dynamic rendering.
 
 ## Native client source
 
-- Linux GTK4: login, native date picker and agenda, adjustable event start/duration, optional reminder on event creation, per-user launcher installer.
-- Android Java: HTTPS login, date picker and agenda, event time picker and opt-in reminder on creation, task operations and logout.
+- Linux GTK4: login, native date picker and agenda, adjustable event start/duration, optional reminder on event creation, task list/completion and priority-based task creation, per-user launcher installer.
+- Android Java: HTTPS login, date picker and agenda, event time picker and opt-in reminder on creation, task list/completion with read-only restrictions, priority on creation and logout.
 - GitHub Actions: Python HTTP, migration, backup and browser markup contract tests, JavaScript syntax, GTK virtual display smoke, Android debug APK build/lint and Docker server readiness.
 
 ## Explicit limitations

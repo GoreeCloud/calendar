@@ -6,7 +6,7 @@ Privacy-conscious, self-hosted calendar development preview. The repository incl
 
 ## Source-implemented capabilities
 
-- Locally provisioned accounts, salted scrypt password hashing, expiring bearer sessions and logout revocation.
+- Locally provisioned accounts, salted scrypt password hashing, expiring bearer sessions, password rotation that revokes all sessions, and self-service sign-out of other sessions.
 - Multiple private calendars, local user sharing and owner, edit, read and **free/busy-only** roles. Free/busy shares reveal occupied intervals without names, notes, locations, tasks or event identifiers.
 - Timed, multi-day and all-day events, timezone-aware event editing, version conflict handling.
 - Bounded recurrence: daily, weekly, monthly, yearly; interval 1–24, count 2–366; optional IANA timezone for local-hour preservation. Individually skip and restore occurrences with optimistic version checks.
@@ -14,13 +14,14 @@ Privacy-conscious, self-hosted calendar development preview. The repository incl
 - Permission-scoped event/task search.
 - ICS import/export: all-day dates, folded text, IANA TZID, bounded RRULEs, EXDATE exclusions, display VALARM reminders and duplicate-UID protection. Unsupported complex rules are rejected.
 - Responsive month, week, agenda, task views; calendar visibility and owner-only rename/recolor/description/delete controls; mobile switcher, recurring-series editing, skip/restore dialogs, optional browser reminders while the tab is open, search and sharing.
-- Authenticated availability explorer for local calendar dates, displaying merged occupied and unscheduled intervals without event details. Unscheduled time is **not** a guaranteed bookable slot.
+- Authenticated availability explorer and private 9 AM–5 PM local meeting-time suggestions across up to five authorized calendars, using recurrence-aware busy data without exposing event details. Unscheduled time is **not** a guaranteed bookable slot.
+- Owner-only bounded JSON portability export (owned calendars, events, recurrence exceptions, reminders and tasks) without account secrets or sharing lists. The downloaded file is sensitive plaintext, not an import/restore mechanism.
 - Online SQLite snapshots, read-only integrity and foreign-key checks, and a verified no-overwrite restore workflow to a NEW database path.
-- Native GTK4 Linux client and Java Android client source, with adjustable event start times and opt-in 15-minute reminders on creation. Android debug APK compilation and GTK virtual-display checks run in CI.
+- Native GTK4 Linux client and Java Android client source, with adjustable event start times and opt-in 15-minute reminders on creation. Linux task creation/completion and Android task priorities/read-only controls are included in the previews. Android debug APK compilation and GTK virtual-display checks run in CI.
 
 **Not implemented:** CalDAV, external two-way sync, single-occurrence event overrides or complete RFC recurrence, public calendar discovery, meeting invitations/RSVP, booking pages, offline edits, reliable background/push notifications, end-to-end encryption, AI scheduling, advanced analytics, signed releases or production deployment. Photo albums are explicitly excluded.
 
-See [current feature status](docs/IMPLEMENTED-FEATURES.md), [planned features](docs/PLANNED-FEATURES.md), [HTTP API](docs/API.md) and [security boundaries](SECURITY.md).
+See [current feature status](docs/IMPLEMENTED-FEATURES.md), [planned features](docs/PLANNED-FEATURES.md), [HTTP API](docs/API.md), [DAV integration plan](docs/DAV-INTEROPERABILITY.md) and [security boundaries](SECURITY.md).
 
 ## Run locally
 

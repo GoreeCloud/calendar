@@ -12,6 +12,9 @@ Use Authorization: Bearer TOKEN on every /api/v1 route except /login. JSON bodie
 | GET | /readyz | Persistent database readiness |
 | POST | /api/v1/login | Login with email/password |
 | POST | /api/v1/logout | Revoke session |
+| GET | /api/v1/sessions | Count the current user's active sessions |
+| POST | /api/v1/sessions/revoke-others | Revoke all other sessions while preserving the current bearer token |
+| POST | /api/v1/account/change-password | Reauthenticate and change password; revoke all sessions |
 | GET | /api/v1/me | Current account |
 | GET, POST | /api/v1/calendars | List owned/shared calendars; create calendar |
 | PATCH, DELETE | /api/v1/calendars/{id} | Owner-only update/delete |
@@ -25,6 +28,7 @@ Use Authorization: Bearer TOKEN on every /api/v1 route except /login. JSON bodie
 | PATCH, DELETE | /api/v1/tasks/{id} | Write-authorized task update/delete (including priority 1–4) |
 | GET | /api/v1/search?q={query} | Authorized event/task text search |
 | GET | /api/v1/availability?calendar_id={id}&start={iso}&end={iso} | Authenticated merged busy intervals (all sharing roles) |
+| GET | /api/v1/suggestions?calendar_ids={ids}&start={iso}&end={iso} | Private 9 AM–5 PM scheduling candidates across authorized calendars |
 | POST | /api/v1/import.ics | Import supported iCalendar events |
 | GET | /api/v1/export.ics?calendar_id={id} | Export an accessible calendar |
 | GET | /api/v1/export.json | Export all calendars owned by the current user as a bounded JSON dataset |
@@ -74,3 +78,7 @@ GET `/api/v1/suggestions` accepts 1–5 distinct comma-separated `calendar_ids`,
 ## Private owner data export
 
 GET `/api/v1/export.json` returns `goreecloud-calendar-data` schema version 1 with the signed-in user's **owned** calendars (metadata, event fields, recurrence rules, excluded occurrences, reminders and tasks including priority). Shared calendars not owned by the user are deliberately omitted, even when the user can read their event details. Password hashes, salts, authentication sessions, other users, membership lists and private shared-account calendars are excluded. Export is limited to 200 calendars, 5,000 combined event/task records and 5 MiB response size; oversized exports return HTTP 413. The browser offers a local plaintext JSON download after explicit confirmation. **This is a portability snapshot, not a verified restore/import mechanism, retention guarantee or encryption layer.** The file must be protected by its holder.
+
+## Local account security controls
+
+GET `/api/v1/sessions` reports only the number of unexpired sessions belonging to the bearer-token user. POST `/api/v1/sessions/revoke-others` deletes that user's sessions other than the invoking token. POST `/api/v1/account/change-password` requires JSON `current_password` and `new_password` (12–128 characters and different from the current password), verifies the existing password and revokes **all** sessions after changing the scrypt credential hash. The caller must sign in anew. An in-flight old-password login cannot create a new session after rotation: its credential record is rechecked under a SQLite write transaction. These are development features and do not replace production MFA, account recovery, or multi-node token revocation.

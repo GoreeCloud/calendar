@@ -10,9 +10,9 @@ Install a per-user desktop launcher:
     sh linux/install.sh
 
 The client provides a native sign-in screen, date picker, read-only day list and
-event creation with selectable start hour, minute, duration (15–480 minutes) and optional 15-minute reminder. Bearer tokens are held in
+event creation with selectable start hour, minute, duration (15–480 minutes) and optional 15-minute reminder. A Tasks tab lists authorized tasks, permits completion toggles only for editable calendars and supports priority-based task creation. Bearer tokens are held in
 memory and not written to disk. Server origins must use HTTPS, except HTTP to
 loopback for local development. Do not expose the self-hosted HTTP server publicly.
 
-Editing existing events, offline storage, OS notification delivery, accessibility review, distro
+Editing existing events and tasks, offline storage, OS notification delivery, accessibility review, distro
 package creation and actual Linux runtime acceptance are still required.

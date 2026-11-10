@@ -56,3 +56,7 @@ A feature is implemented only after source, tests and its platform behavior just
 ## Current preview boundary (November 10, 2026)
 
 Basic calendar metadata editing, private availability exploration, P1–P4 task priority, all-day/recurring events, free/busy-only sharing and ICS portability are implemented in source and tested by repository CI as applicable. This roadmap does not redefine those as pending; deeper scheduling automation, public booking pages, reminders that work after the browser closes, full CalDAV, encrypted offline clients, device acceptance, and production deployment remain planned. No photo albums.
+
+## Existing preview improvements and DAV coordination
+
+Private scheduling candidates across up to five local calendars, owner-only JSON data export, password/session controls and basic native task parity are implemented in the Calendar development branch; they are **not** release acceptance. The dedicated GoreeCloud DAV project already maintains an independent experimental CalDAV/CardDAV/WebDAV backend. Calendar must integrate with that governed backend rather than inventing a second protocol server or a shared-database shortcut. See [DAV interoperability contract](DAV-INTEROPERABILITY.md) for identity, storage, ETag, synchronization and privacy gates. Appointment booking and real two-way CalDAV synchronization remain unimplemented.
