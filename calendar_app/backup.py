@@ -29,6 +29,8 @@ def backup_database(source: str, destination: str) -> None:
             check = snapshot.execute("PRAGMA integrity_check").fetchone()
             if check is None or check[0] != "ok":
                 raise ValueError("Backup integrity check failed")
+            if snapshot.execute("PRAGMA foreign_key_check").fetchone() is not None:
+                raise ValueError("Backup contains invalid foreign-key references")
         verify = os.open(temporary, os.O_RDONLY)
         try:
             os.fsync(verify)
@@ -76,44 +78,15 @@ def verify_backup(path: str) -> bool:
         raise ValueError("Backup cannot be read as a valid SQLite database") from None
 
 
+
 def restore_database(snapshot: str, destination: str) -> None:
-    """Copy an independently verified snapshot to a NEW database pathname.
+    """Validate a snapshot and publish a NEW verified SQLite database.
 
-    The destination must not exist. Source is never modified; the temporary
-    copy is verified before a same-filesystem, atomic no-clobber publication.
-    This is a restore-to-new-path workflow, never a live in-place replacement.
+    Uses SQLite's consistent online backup API, rather than copying raw pages
+    that could omit a source WAL file. No existing target can be replaced.
+    This command does not alter any currently configured server database.
     """
-    import shutil
-
-    source=Path(snapshot).expanduser()
-    dest=Path(destination).expanduser()
-    if source.is_symlink() or not source.is_file():
-        raise ValueError("Snapshot must exist as a regular file")
-    if not dest.parent.is_dir():
-        raise ValueError("Restore destination parent directory does not exist")
-    if dest.is_symlink() or dest.exists() or source.resolve()==dest.resolve():
-        raise FileExistsError("Refusing to overwrite destination")
-    verify_backup(str(source))
-    handle,temporary=tempfile.mkstemp(prefix=".goreecloud-calendar-restore-",
-                                       suffix=".tmp",dir=dest.parent)
-    try:
-        os.fchmod(handle,0o600)
-        # Copy the snapshot, not a live SQLite database; the copied content is
-        # verified after closing and flushing the file.
-        with source.open("rb") as inp, os.fdopen(handle,"wb") as out:
-            handle=-1
-            shutil.copyfileobj(inp,out,length=1024*1024)
-            out.flush()
-            os.fsync(out.fileno())
-        verify_backup(temporary)
-        os.link(temporary,dest)
-        directory_fd=os.open(str(dest.parent),os.O_RDONLY)
-        try:
-            os.fsync(directory_fd)
-        finally:
-            os.close(directory_fd)
-    finally:
-        if handle>=0:
-            os.close(handle)
-        if os.path.exists(temporary):
-            os.unlink(temporary)
+    verify_backup(snapshot)
+    backup_database(snapshot,destination)
+    # Confirm the published database, not only the temporary backup copy.
+    verify_backup(destination)
