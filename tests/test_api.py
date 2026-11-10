@@ -253,6 +253,15 @@ class CalendarAPITests(unittest.TestCase):
                          {"email":"other@example.test","role":"read"})[0],200)
         self.assertEqual(len(self.request("GET","/api/v1/search?q=planning",self.other)[1]["events"]),1)
 
+    def test_login_throttle_after_repeated_failures(self):
+        for _ in range(10):
+            status,_response=self.request("POST","/api/v1/login",body={
+                "email":"owner@example.test","password":"incorrect-password"})
+            self.assertEqual(status,401)
+        self.assertEqual(self.request("POST","/api/v1/login",body={
+            "email":"owner@example.test","password":"incorrect-password"})[0],429)
+        self.assertEqual(self.request("GET","/healthz")[0],200)
+
     def test_logout_and_security_headers(self):
         self.assertEqual(self.request("GET","/api/v1/calendars")[0],401)
         self.assertEqual(self.request("POST","/api/v1/register",body={})[0],401)

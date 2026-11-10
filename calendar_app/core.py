@@ -568,6 +568,18 @@ class CalendarHandler(BaseHTTPRequestHandler):
         email = body["email"].strip().casefold()
         if len(email)>320 or len(body["password"])>128:
             raise Failure(400, "Invalid credentials")
+        # In-memory per-client-IP limiter. This protects the local development
+        # listener from repeated password guessing; it is not distributed
+        # production throttling and never trusts spoofable proxy headers.
+        source_ip = self.client_address[0]
+        current = time.monotonic()
+        with self.server.login_lock:
+            attempts = [moment for moment in self.server.login_attempts.get(source_ip, ())
+                        if current-moment < 300]
+            if len(attempts) >= 10:
+                raise Failure(429, "Too many sign-in attempts; try again later")
+            attempts.append(current)
+            self.server.login_attempts[source_ip] = attempts
         with database(self.server.db_path) as db:
             row = db.execute("SELECT * FROM users WHERE email=?", (email,)).fetchone()
             # Run the KDF even when the account is absent to reduce user enumeration.
@@ -581,6 +593,8 @@ class CalendarHandler(BaseHTTPRequestHandler):
             db.execute("DELETE FROM sessions WHERE expires<=?",(int(time.time()),))
             db.execute("INSERT INTO sessions VALUES(?,?,?)",
                        (hashlib.sha256(token.encode("ascii")).hexdigest(),row["id"],expiry))
+        with self.server.login_lock:
+            self.server.login_attempts.pop(source_ip, None)
         return self._send(200,{"token":token,"expires_at":expiry,"email":email})
 
 def make_server(db_path: str, host: str = "127.0.0.1", port: int = 8787) -> ThreadingHTTPServer:
@@ -588,4 +602,6 @@ def make_server(db_path: str, host: str = "127.0.0.1", port: int = 8787) -> Thre
     server = ThreadingHTTPServer((host,port),CalendarHandler)
     server.daemon_threads = True
     server.db_path = str(db_path)
+    server.login_attempts = {}
+    server.login_lock = threading.Lock()
     return server

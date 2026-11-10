@@ -7,7 +7,7 @@ This service is not a hardened internet-facing application. Do not expose the Py
 ## Implemented source controls
 
 - Local account provisioning; no open self-registration.
-- Salted scrypt password hashing; random session tokens stored hashed and revoked on logout.
+- Salted scrypt password hashing; random session tokens stored hashed and revoked on logout. Process-local login throttling limits repeated incorrect credentials.
 - Calendar owner/read/edit membership authorization for events, tasks, search and ICS import/export.
 - Sharing available only to locally provisioned accounts; revocation requires calendar ownership.
 - Parameterized SQL, bounded JSON, validated timestamps, ICS size/event limits and explicit rejection of complex unsupported recurrence.
@@ -19,7 +19,7 @@ This service is not a hardened internet-facing application. Do not expose the Py
 ## Important missing controls
 
 - No production TLS listener or hardened HTTPS reverse proxy.
-- No login throttling, MFA, password recovery, production GoreeCloud Identity integration or device controls.
+- Only basic process-local, per-client-IP login throttling exists (10 attempts per five minutes); there is no shared/distributed abuse defense, MFA, password recovery, production GoreeCloud Identity integration or device control.
 - Sharing is **not end-to-end encrypted**. There is no free/busy-only mode or federation.
 - SQLite event text and backup snapshots are **not encrypted at rest**.
 - No automatic encrypted offsite backup, restore rehearsal or comprehensive disaster recovery.
