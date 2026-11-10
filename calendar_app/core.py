@@ -265,6 +265,17 @@ class CalendarHandler(BaseHTTPRequestHandler):
         path = route.path
         if method == "GET" and path == "/healthz":
             return self._send(200, {"status": "ok"})
+        if method == "GET" and path == "/readyz":
+            # Readiness verifies the persistent schema, not just the HTTP listener.
+            if not Path(self.server.db_path).is_file():
+                return self._send(503, {"status": "unavailable"})
+            try:
+                with database(self.server.db_path) as ready_db:
+                    ready_db.execute("SELECT id FROM users LIMIT 1").fetchone()
+                    ready_db.execute("SELECT id FROM calendars LIMIT 1").fetchone()
+            except sqlite3.Error:
+                return self._send(503, {"status": "unavailable"})
+            return self._send(200, {"status": "ready"})
         static = {"/": ("index.html", "text/html"), "/app.js": ("app.js", "text/javascript"),
                   "/styles.css": ("styles.css", "text/css")}
         if method == "GET" and path in static:

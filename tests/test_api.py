@@ -262,6 +262,12 @@ class CalendarAPITests(unittest.TestCase):
             "email":"owner@example.test","password":"incorrect-password"})[0],429)
         self.assertEqual(self.request("GET","/healthz")[0],200)
 
+    def test_readiness_checks_persistent_database(self):
+        status,data=self.request("GET","/healthz")
+        self.assertEqual((status,data),(200,{"status":"ok"}))
+        status,data=self.request("GET","/readyz")
+        self.assertEqual((status,data),(200,{"status":"ready"}))
+
     def test_logout_and_security_headers(self):
         self.assertEqual(self.request("GET","/api/v1/calendars")[0],401)
         self.assertEqual(self.request("POST","/api/v1/register",body={})[0],401)

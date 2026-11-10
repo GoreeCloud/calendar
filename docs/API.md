@@ -8,7 +8,8 @@ Use Authorization: Bearer TOKEN on every /api/v1 route except /login. JSON bodie
 
 | Method | Path | Description |
 | --- | --- | --- |
-| GET | /healthz | Process health |
+| GET | /healthz | Process liveness |
+| GET | /readyz | Persistent database readiness |
 | POST | /api/v1/login | Login with email/password |
 | POST | /api/v1/logout | Revoke session |
 | GET | /api/v1/me | Current account |
