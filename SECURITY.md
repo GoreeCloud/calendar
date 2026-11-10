@@ -14,7 +14,7 @@ This service is not a hardened internet-facing application. Do not expose the Py
 - Default localhost binding; example container configuration uses a host loopback port.
 - Security response headers, restrictive Content Security Policy and no external browser JavaScript.
 - No mandatory telemetry or calendar provider.
-- Manual no-overwrite SQLite snapshots, structural integrity checks and separate backup verification.
+- Manual no-overwrite SQLite snapshots, structural and foreign-key integrity checks, independent backup verification, and restore to a new path without replacing a live database.
 
 ## Important missing controls
 
@@ -22,7 +22,7 @@ This service is not a hardened internet-facing application. Do not expose the Py
 - Only basic process-local, per-client-IP login throttling exists (10 attempts per five minutes); there is no shared/distributed abuse defense, MFA, password recovery, production GoreeCloud Identity integration or device control.
 - Sharing is **not end-to-end encrypted**. Free/busy-only is an application-level server redaction policy, not cryptographic confidentiality; federation and cross-instance policy enforcement do not exist.
 - SQLite event text and backup snapshots are **not encrypted at rest**.
-- No automatic encrypted offsite backup, restore rehearsal or comprehensive disaster recovery.
+- No automatic encrypted offsite backup, validated production restore/cutover rehearsal or comprehensive disaster recovery. The local restore-to-new-path tests do not prove an actual deployment recovery objective.
 - Session tokens held in web sessionStorage remain vulnerable to XSS or malicious extensions.
 - No production threat-model review, attack simulation, security audit, signed release, deployment acceptance, or independent Android/Linux device security validation.
 - No complete GoreeShield policy engine or Wardveil service integration. Opt-in browser alerts reveal event details to the local OS only while the tab is open; there is no background push service.

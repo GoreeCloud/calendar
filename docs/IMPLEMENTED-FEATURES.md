@@ -12,7 +12,7 @@
 - Task creation, reading, completion, updates, deletion and P1–P4 priorities, with lossless schema upgrade for existing tasks.
 - Permission-scoped search across event text and tasks; bounded authenticated availability API returning merged UTC intervals from events and recurrences.
 - ICS import/export with IANA timezone, all-day dates, bounded recurrence, UID deduplication, EXDATE exclusions and one supported display VALARM.
-- Online no-clobber SQLite snapshots and independent read-only integrity verification.
+- Online no-clobber SQLite snapshots, independent structural and foreign-key verification, and no-overwrite restore to a NEW database file, tested with calendar event and task recovery.
 - Local-loopback server default and example Docker Compose.
 
 ## Web client

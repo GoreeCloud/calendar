@@ -15,7 +15,7 @@ Privacy-conscious, self-hosted calendar development preview. The repository incl
 - ICS import/export: all-day dates, folded text, IANA TZID, bounded RRULEs, EXDATE exclusions, display VALARM reminders and duplicate-UID protection. Unsupported complex rules are rejected.
 - Responsive month, week, agenda, task views; calendar visibility and owner-only rename/recolor/description/delete controls; mobile switcher, recurring-series editing, skip/restore dialogs, optional browser reminders while the tab is open, search and sharing.
 - Authenticated availability explorer for local calendar dates, displaying merged occupied and unscheduled intervals without event details. Unscheduled time is **not** a guaranteed bookable slot.
-- Online SQLite snapshots with no-overwrite publication; independent backup verification.
+- Online SQLite snapshots, read-only integrity and foreign-key checks, and a verified no-overwrite restore workflow to a NEW database path.
 - Native GTK4 Linux client and Java Android client source, with adjustable event start times and opt-in 15-minute reminders on creation. Android debug APK compilation and GTK virtual-display checks run in CI.
 
 **Not implemented:** CalDAV, external two-way sync, single-occurrence event overrides or complete RFC recurrence, public calendar discovery, meeting invitations/RSVP, booking pages, offline edits, reliable background/push notifications, end-to-end encryption, AI scheduling, advanced analytics, signed releases or production deployment. Photo albums are explicitly excluded.
@@ -43,8 +43,9 @@ The example publishes only to host loopback, 127.0.0.1:8787. It has no productio
 
     python -m calendar_app backup --output /secure/location/calendar-snapshot.sqlite3
     python -m calendar_app verify-backup --input /secure/location/calendar-snapshot.sqlite3
+    python -m calendar_app restore-backup --input /secure/location/calendar-snapshot.sqlite3 --output /secure/location/restored-calendar.sqlite3
 
-Both commands are local. Snapshots cannot silently overwrite an existing backup. The backup file is **not encrypted**. Verification checks database structure/integrity, **not** successful restoration. Protect data and test actual restores separately.
+All commands are local. Backups and restores refuse to overwrite existing files. The restore command validates a snapshot and writes a separate verified SQLite database, preserving its user accounts, calendars, events and tasks. It does **not** reconfigure or replace a running server database. Stop the server and plan a verified operator-controlled cutover separately. **Backups are not encrypted.** Protect data, manage retention and rehearse restoration on each target deployment before relying on recovery procedures.
 
 ## Development checks
 
@@ -52,7 +53,7 @@ Both commands are local. Snapshots cannot silently overwrite an existing backup.
     python -m compileall -q calendar_app tests linux
     node --check web/app.js
 
-CI runs Python HTTP and SQLite upgrade tests, browser DOM/selector checks and JavaScript syntax checks, GTK virtual-display smoke tests, Android debug APK compilation/lint and Docker startup checks. A passing build does not demonstrate production, visual, or real-device acceptance.
+CI runs Python HTTP, SQLite upgrade and backup/restore tests; browser DOM selector checks and JavaScript syntax checks; GTK virtual-display smoke tests; Android debug compilation/lint; and Docker startup readiness checks. A passing build does not demonstrate production, visual, or real-device acceptance.
 
 Native development instructions: [Linux GTK4](linux/README.md) and [Android](android/README.md).
 
@@ -68,3 +69,7 @@ Native development instructions: [Linux GTK4](linux/README.md) and [Android](and
 The five GoreeCloud MIPS (UI, Mesh, Identity, GoreeShield privacy and Wardveil cybersecurity) are governing integration targets, not yet verified runtime services in this implementation.
 
 Original repository source is [MIT licensed](LICENSE). Future third-party dependencies require independent security, license and attribution review.
+
+### Recovery caution
+
+The `restore-backup` command is an offline, no-clobber extraction and verification tool. It cannot automatically migrate DNS, containers, application identities, attached volumes, encryption keys or reverse-proxy routes. A running deployment requires a separately reviewed cutover and rollback plan. A green CI restore test is not production disaster-recovery acceptance.
