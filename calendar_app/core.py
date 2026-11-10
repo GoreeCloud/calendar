@@ -344,6 +344,46 @@ class CalendarHandler(BaseHTTPRequestHandler):
                            (hashlib.sha256(token.encode("ascii")).hexdigest(),))
                 db.commit()
                 return self._send(200, {"ok": True})
+            if path == "/api/v1/sessions" and method == "GET":
+                count=db.execute("SELECT COUNT(*) AS n FROM sessions "
+                                 "WHERE user_id=? AND expires>?",(user,int(time.time()))).fetchone()
+                return self._send(200,{"active_sessions":count["n"]})
+            if path == "/api/v1/sessions/revoke-others" and method == "POST":
+                # Keep the invoking session; do not reveal or return session tokens.
+                current_hash=hashlib.sha256(self.headers.get("Authorization","")[7:]
+                                            .encode("ascii")).hexdigest()
+                changed=db.execute("DELETE FROM sessions WHERE user_id=? AND token_hash<>?",
+                                   (user,current_hash)).rowcount
+                db.commit()
+                return self._send(200,{"revoked":changed})
+            if path == "/api/v1/account/change-password" and method == "POST":
+                body=self._body()
+                if set(body)!={"current_password","new_password"}:
+                    raise Failure(400,"Current and new passwords required")
+                current,updated=body["current_password"],body["new_password"]
+                if not isinstance(current,str) or len(current)>128:
+                    raise Failure(400,"Invalid current password")
+                if not isinstance(updated,str):
+                    raise Failure(400,"Invalid new password")
+                validate_password(updated)
+                row=db.execute("SELECT salt,password_hash FROM users WHERE id=?",(user,)).fetchone()
+                if row is None or not hmac.compare_digest(
+                    digest_password(current,row["salt"]),row["password_hash"]
+                ):
+                    raise Failure(403,"Current password is incorrect")
+                if hmac.compare_digest(current,updated):
+                    raise Failure(400,"New password must differ from the current password")
+                # Conditional mutation avoids silently stomping a concurrent
+                # credential change. All existing sessions are invalidated.
+                salt=secrets.token_hex(16)
+                changed=db.execute("UPDATE users SET salt=?,password_hash=? "
+                    "WHERE id=? AND password_hash=?",
+                    (salt,digest_password(updated,salt),user,row["password_hash"]))
+                if changed.rowcount!=1:
+                    raise Failure(409,"Password changed elsewhere; sign in again")
+                db.execute("DELETE FROM sessions WHERE user_id=?",(user,))
+                db.commit()
+                return self._send(200,{"ok":True,"signed_out":True})
             if path == "/api/v1/calendars":
                 if method == "GET":
                     rows = db.execute("SELECT c.*, CASE WHEN c.owner_id=? THEN 'owner' "

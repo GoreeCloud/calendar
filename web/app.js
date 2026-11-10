@@ -343,6 +343,50 @@ async function exportCalendar(){
     toast("Calendar exported.");
   }catch(error){toast(error.message);}
 }
+async function showSecurityDialog(){
+  $("current-password").value="";
+  $("new-password").value="";
+  $("confirm-password").value="";
+  $("security-dialog").showModal();
+  try{
+    const data=await api("/sessions");
+    $("security-session-count").textContent=data.active_sessions+
+      (data.active_sessions===1?" active session":" active sessions");
+  }catch(error){$("security-session-count").textContent=error.message;}
+}
+["account-security","mobile-security"].forEach(id=>
+  $(id).addEventListener("click",showSecurityDialog));
+$("revoke-other-sessions").addEventListener("click",async()=>{
+  const button=$("revoke-other-sessions");button.disabled=true;
+  try{
+    const data=await api("/sessions/revoke-others",{method:"POST"});
+    $("security-session-count").textContent="1 active session";
+    toast("Signed out "+data.revoked+" other session(s).");
+  }catch(error){toast(error.message);}
+  finally{button.disabled=false;}
+});
+$("change-password-form").addEventListener("submit",async event=>{
+  event.preventDefault();
+  const current_password=$("current-password").value;
+  const new_password=$("new-password").value;
+  if(new_password!==$("confirm-password").value){
+    toast("New passwords do not match.");return;
+  }
+  const button=$("change-password-submit");button.disabled=true;
+  try{
+    await api("/account/change-password",{method:"POST",
+      body:{current_password,new_password}});
+    $("security-dialog").close();
+    signOut(false);
+    $("login-error").textContent="Password changed. Sign in with your new password.";
+  }catch(error){toast(error.message);}
+  finally{
+    $("current-password").value="";
+    $("new-password").value="";
+    $("confirm-password").value="";
+    button.disabled=false;
+  }
+});
 $("login-form").addEventListener("submit",async evt=>{
   evt.preventDefault();$("login-error").textContent="";
   try{

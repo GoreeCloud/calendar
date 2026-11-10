@@ -531,6 +531,44 @@ class CalendarAPITests(unittest.TestCase):
             "start_at":"2026-03-08T06:00:00Z",
             "end_at":"2026-03-09T05:00:00Z"}])
 
+    def test_password_change_revokes_all_sessions_and_requires_reauthentication(self):
+        second=self.login("owner@example.test","very-long-owner-password")
+        count=self.request("GET","/api/v1/sessions",self.owner)
+        self.assertEqual(count[0],200)
+        self.assertEqual(count[1]["active_sessions"],2)
+        path="/api/v1/account/change-password"
+        self.assertEqual(self.request("POST",path,self.owner,{"current_password":"wrong",
+            "new_password":"new-super-secret-password"})[0],403)
+        self.assertEqual(self.request("POST",path,self.owner,{"current_password":"very-long-owner-password",
+            "new_password":"tiny"})[0],400)
+        self.assertEqual(self.request("POST",path,self.owner,{"current_password":"very-long-owner-password",
+            "new_password":"very-long-owner-password"})[0],400)
+        status,changed=self.request("POST",path,self.owner,{
+            "current_password":"very-long-owner-password",
+            "new_password":"new-super-secret-password"})
+        self.assertEqual((status,changed),(200,{"ok":True,"signed_out":True}))
+        self.assertEqual(self.request("GET","/api/v1/me",self.owner)[0],401)
+        self.assertEqual(self.request("GET","/api/v1/me",second)[0],401)
+        self.assertEqual(self.request("POST","/api/v1/login",body={
+            "email":"owner@example.test","password":"very-long-owner-password"})[0],401)
+        fresh=self.login("owner@example.test","new-super-secret-password")
+        self.assertEqual(self.request("GET","/api/v1/me",fresh)[0],200)
+        self.assertEqual(self.request("GET","/api/v1/me",self.other)[0],200)
+
+    def test_session_revocation_keeps_current_token_only(self):
+        extra=self.login("owner@example.test","very-long-owner-password")
+        third=self.login("owner@example.test","very-long-owner-password")
+        self.assertEqual(self.request("GET","/api/v1/sessions",self.owner)[1]["active_sessions"],3)
+        status,response=self.request("POST","/api/v1/sessions/revoke-others",self.owner)
+        self.assertEqual((status,response),(200,{"revoked":2}))
+        self.assertEqual(self.request("GET","/api/v1/me",self.owner)[0],200)
+        self.assertEqual(self.request("GET","/api/v1/me",extra)[0],401)
+        self.assertEqual(self.request("GET","/api/v1/me",third)[0],401)
+        self.assertEqual(self.request("GET","/api/v1/sessions",self.owner)[1]["active_sessions"],1)
+        self.assertEqual(self.request("POST","/api/v1/sessions/revoke-others",self.other)[1],
+                         {"revoked":0})
+        self.assertEqual(self.request("POST","/api/v1/sessions/revoke-others")[0],401)
+
     def test_logout_and_security_headers(self):
         self.assertEqual(self.request("GET","/api/v1/calendars")[0],401)
         self.assertEqual(self.request("POST","/api/v1/register",body={})[0],401)
