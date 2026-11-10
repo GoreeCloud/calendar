@@ -21,7 +21,7 @@ async function api(path,{method="GET",body}={}) {
   if(body!==undefined)headers["Content-Type"]="application/json";
   let response;
   try {
-    response = await fetch("/api/v1"+path,{method,headers,body:body===undefined?undefined:JSON.stringify(body),cache:"no-store"});
+    response = await fetch("/api/v1"+path,{method,headers,body:body===undefined?undefined:JSON.stringify(body),cache:"no-store",redirect:"error"});
   } catch {throw new Error("Connection unavailable. Your changes were not sent.");}
   if(response.status===401 && path!=="/login"){signOut(false);throw new Error("Your session expired. Sign in again.");}
   const data=await response.json();
@@ -34,7 +34,7 @@ function signedIn(yes){
 }
 function signOut(notify=true){
   const old=state.token;state.token=null;sessionStorage.removeItem("gc-calendar-token");signedIn(false);
-  if(old&&notify)fetch("/api/v1/logout",{method:"POST",headers:{"Authorization":"Bearer "+old}}).catch(()=>{});
+  if(old&&notify)fetch("/api/v1/logout",{method:"POST",headers:{"Authorization":"Bearer "+old},redirect:"error"}).catch(()=>{});
 }
 async function start(){
   if(!state.token){signedIn(false);return;}
@@ -305,7 +305,7 @@ async function exportCalendar(){
   const cid=state.calendars.find(c=>!state.hidden.has(c.id))?.id;
   if(!cid){toast("Select a visible calendar first.");return;}
   try{
-    const response=await fetch("/api/v1/export.ics?calendar_id="+encodeURIComponent(cid),{headers:{Authorization:"Bearer "+state.token}});
+    const response=await fetch("/api/v1/export.ics?calendar_id="+encodeURIComponent(cid),{headers:{Authorization:"Bearer "+state.token},redirect:"error"});
     if(!response.ok)throw new Error("Unable to export calendar");
     const blob=await response.blob(),url=URL.createObjectURL(blob),a=el("a");
     a.href=url;a.download="goreecloud-calendar.ics";document.body.append(a);a.click();a.remove();URL.revokeObjectURL(url);
@@ -316,7 +316,7 @@ $("login-form").addEventListener("submit",async evt=>{
   evt.preventDefault();$("login-error").textContent="";
   try{
     const r=await fetch("/api/v1/login",{method:"POST",headers:{"Content-Type":"application/json"},
-      body:JSON.stringify({email:$("login-email").value,password:$("login-password").value})});
+      body:JSON.stringify({email:$("login-email").value,password:$("login-password").value}),redirect:"error"});
     const data=await r.json();if(!r.ok)throw new Error(data.error||"Sign-in failed");
     state.token=data.token;sessionStorage.setItem("gc-calendar-token",state.token);await start();
   }catch(error){$("login-error").textContent=error.message;}

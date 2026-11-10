@@ -19,6 +19,13 @@ def origin(text):
         return text.strip().rstrip("/")
     raise ValueError("HTTPS is required except on loopback")
 
+class _NoRedirect(urllib.request.HTTPRedirectHandler):
+    """Block HTTP redirects; never forward an authorization token to a new origin."""
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        return None
+
+_NO_REDIRECTS=urllib.request.build_opener(_NoRedirect())
+
 class CalendarClient(Gtk.Application):
     def __init__(self):
         super().__init__(application_id="com.goreecloud.Calendar")
@@ -80,7 +87,7 @@ class CalendarClient(Gtk.Application):
         url=self.api_url+"/api/v1"+path
         req=urllib.request.Request(url,method=method,headers=headers,
           data=json.dumps(body).encode() if body is not None else None)
-        with urllib.request.urlopen(req,timeout=12) as response:
+        with _NO_REDIRECTS.open(req,timeout=12) as response:
             return json.load(response)
 
     def run_async(self,task,done):
