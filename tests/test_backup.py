@@ -38,6 +38,56 @@ class BackupTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 verify_backup(str(Path(folder)/"missing.db"))
 
+
+    def test_restore_to_new_database_preserves_calendar_and_tasks(self):
+        from calendar_app.backup import restore_database,verify_backup
+        from calendar_app.core import now
+        with tempfile.TemporaryDirectory() as folder:
+            source=str(Path(folder)/"live.db")
+            snapshot=str(Path(folder)/"snapshot.db")
+            restored=str(Path(folder)/"restored.db")
+            create_user(source,"restore@example.test","long-enough-password-123")
+            with database(source) as db:
+                cid=db.execute("SELECT id FROM calendars LIMIT 1").fetchone()[0]
+                db.execute("INSERT INTO events "
+                           "(id,calendar_id,title,description,location,start_at,end_at,all_day,"
+                           "version,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?)",
+                           ("e",cid,"Recovered appointment","","","2026-11-10T12:00:00Z",
+                            "2026-11-10T13:00:00Z",0,1,now(),now()))
+                db.execute("INSERT INTO tasks "
+                           "(id,calendar_id,title,due_at,done,created_at,updated_at,priority) "
+                           "VALUES(?,?,?,?,?,?,?,?)",
+                           ("t",cid,"Recovered task",None,0,now(),now(),1))
+            backup_database(source,snapshot)
+            restore_database(snapshot,restored)
+            self.assertTrue(verify_backup(restored))
+            with sqlite3.connect(restored) as db:
+                self.assertEqual(db.execute("SELECT title FROM events").fetchone()[0],
+                                 "Recovered appointment")
+                self.assertEqual(db.execute("SELECT title,priority FROM tasks").fetchone(),
+                                 ("Recovered task",1))
+                self.assertEqual(db.execute("PRAGMA foreign_key_check").fetchall(),[])
+            old=Path(restored).read_bytes()
+            with self.assertRaises(FileExistsError):
+                restore_database(snapshot,restored)
+            self.assertEqual(old,Path(restored).read_bytes())
+            self.assertTrue(Path(source).is_file())
+            self.assertTrue(Path(snapshot).is_file())
+
+    def test_restore_rejects_corrupt_snapshot_without_publishing(self):
+        from calendar_app.backup import restore_database
+        with tempfile.TemporaryDirectory() as folder:
+            broken=Path(folder)/"corrupt.db"
+            broken.write_bytes(b"not sqlite")
+            dest=Path(folder)/"destination.db"
+            with self.assertRaises(ValueError):
+                restore_database(str(broken),str(dest))
+            self.assertFalse(dest.exists())
+            source=Path(folder)/"symlink.db"
+            source.symlink_to(broken)
+            with self.assertRaises(ValueError):
+                restore_database(str(source),str(dest))
+
     def test_rejects_missing_source(self):
         with tempfile.TemporaryDirectory() as folder:
             with self.assertRaises(ValueError):

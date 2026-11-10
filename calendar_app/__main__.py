@@ -3,7 +3,7 @@ import argparse
 import getpass
 import os
 from .core import Failure, create_user, init_database, make_server
-from .backup import backup_database, verify_backup
+from .backup import backup_database, verify_backup, restore_database
 
 def main():
     os.umask(0o077)
@@ -19,6 +19,10 @@ def main():
     backup.add_argument("--output", required=True, help="New destination path (must not exist)")
     verify = commands.add_parser("verify-backup", help="Read-only check of a saved calendar snapshot")
     verify.add_argument("--input", required=True, help="Existing backup path")
+    restore = commands.add_parser("restore-backup",
+                                  help="Validate a snapshot and restore to a NEW database path")
+    restore.add_argument("--input", required=True, help="Existing verified snapshot path")
+    restore.add_argument("--output", required=True, help="New database path (must not exist)")
     args = parser.parse_args()
     if args.command == "create-admin":
         init_database(args.database)
@@ -42,7 +46,14 @@ def main():
             verify_backup(args.input)
         except (OSError, ValueError) as error:
             parser.error(str(error))
-        print("SQLite backup structure and integrity checks passed. Restore testing remains a separate requirement.")
+        print("SQLite backup structure and integrity checks passed.")
+    elif args.command == "restore-backup":
+        try:
+            restore_database(args.input,args.output)
+        except (OSError, ValueError) as error:
+            parser.error(str(error))
+        print("Snapshot restored to a new database file and integrity verified. "
+              "Original data was not replaced; configure the server separately.")
     else:
         with make_server(args.database,args.host,args.port) as server:
             print(f"GoreeCloud Calendar listening at http://{args.host}:{server.server_address[1]}")
