@@ -28,6 +28,23 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y python3-gi gir1.2-gtk-4.0
       - name: Verify native binding imports
         run: /usr/bin/python3 -c 'import gi; gi.require_version("Gtk", "4.0"); from gi.repository import Gtk; print(Gtk.MAJOR_VERSION)'
+      - name: Smoke-test GTK application under virtual display
+        run: |
+          sudo apt-get install -y xvfb
+          set +e
+          xvfb-run -a timeout 8s /usr/bin/python3 linux/calendar_gtk.py
+          code=$?
+          set -e
+          if [ "$code" -ne 124 ]; then
+            echo "GTK client failed to remain open in the virtual display (exit: $code)"
+            exit 1
+          fi
+      - name: Verify per-user launcher installer
+        run: |
+          temp_home="$(mktemp -d)"
+          HOME="$temp_home" sh linux/install.sh
+          test -f "$temp_home/.local/share/applications/com.goreecloud.Calendar.desktop"
+          test -f "$temp_home/.local/share/goreecloud-calendar/calendar_gtk.py"
   android:
     runs-on: ubuntu-latest
     timeout-minutes: 25
@@ -46,6 +63,15 @@ jobs:
           cache-disabled: 'true'
       - run: sdkmanager "platforms;android-35" "build-tools;35.0.0"
       - run: gradle -p android --no-daemon :app:assembleDebug
+      - name: Confirm APK package identity and checksum
+        run: |
+          artifact=android/app/build/outputs/apk/debug/app-debug.apk
+          test -s "$artifact"
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$artifact" | grep -q "package: name='com.goreecloud.calendar'"
+          sha256sum "$artifact"
+      - name: Android static lint
+        run: gradle -p android --no-daemon :app:lintDebug
+
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: goreecloud-calendar-android-debug
