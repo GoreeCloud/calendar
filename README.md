@@ -7,17 +7,17 @@ Privacy-conscious, self-hosted calendar development preview. The repository incl
 ## Source-implemented capabilities
 
 - Locally provisioned accounts, salted scrypt password hashing, expiring bearer sessions and logout revocation.
-- Multiple private calendars and locally managed account sharing with owner, read and edit roles.
+- Multiple private calendars, local user sharing and owner, edit, read and **free/busy-only** roles. Free/busy shares reveal occupied intervals without names, notes, locations, tasks or event identifiers.
 - Timed, multi-day and all-day events, timezone-aware event editing, version conflict handling.
-- Bounded recurrence: daily, weekly, monthly, yearly; interval 1–24, count 2–366; optional IANA timezone for local-hour preservation.
+- Bounded recurrence: daily, weekly, monthly, yearly; interval 1–24, count 2–366; optional IANA timezone for local-hour preservation. Individually skip and restore occurrences with optimistic version checks.
 - Tasks with due dates, completion and editing.
 - Permission-scoped event/task search.
-- ICS import/export: all-day dates, folded text, IANA TZID, bounded RRULEs, duplicate-UID protection. Unsupported complex rules are rejected.
-- Responsive month, week, agenda, task views; calendar visibility, mobile switcher, recurring-series editing, search and sharing.
+- ICS import/export: all-day dates, folded text, IANA TZID, bounded RRULEs, EXDATE exclusions, display VALARM reminders and duplicate-UID protection. Unsupported complex rules are rejected.
+- Responsive month, week, agenda, task views; calendar visibility, mobile switcher, recurring-series editing, skip/restore dialogs, optional browser reminders while the tab is open, search and sharing.
 - Online SQLite snapshots with no-overwrite publication; independent backup verification.
-- Native GTK4 Linux client and Java Android client source, with Android debug APK compilation in CI.
+- Native GTK4 Linux client and Java Android client source, with adjustable event start times and opt-in 15-minute reminders on creation. Android debug APK compilation and GTK virtual-display checks run in CI.
 
-**Not implemented:** CalDAV, external two-way sync, recurring exception editing, public calendar discovery, meeting invitations/RSVP, appointment booking, offline edits, alerts/push notifications, end-to-end encryption, AI scheduling, advanced analytics, signed production artifacts or production deployment. Photo albums are explicitly excluded.
+**Not implemented:** CalDAV, external two-way sync, single-occurrence event overrides or complete RFC recurrence, public calendar discovery, meeting invitations/RSVP, booking pages, offline edits, reliable background/push notifications, end-to-end encryption, AI scheduling, advanced analytics, signed releases or production deployment. Photo albums are explicitly excluded.
 
 See [current feature status](docs/IMPLEMENTED-FEATURES.md), [planned features](docs/PLANNED-FEATURES.md), [HTTP API](docs/API.md) and [security boundaries](SECURITY.md).
 

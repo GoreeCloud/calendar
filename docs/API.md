@@ -19,25 +19,27 @@ Use Authorization: Bearer TOKEN on every /api/v1 route except /login. JSON bodie
 | DELETE | /api/v1/calendars/{id}/members/{user_id} | Owner-only revoke |
 | GET, POST | /api/v1/events | Query event window; create event |
 | PATCH, DELETE | /api/v1/events/{id} | Write-authorized event update/delete |
+| GET, POST | /api/v1/events/{id}/exclusions | List or skip individual dates in a recurring series (write role) |
+| DELETE | /api/v1/events/{id}/exclusions?occurrence_start_at={iso}&version={n} | Restore one previously skipped occurrence |
 | GET, POST | /api/v1/tasks | List and create tasks |
 | PATCH, DELETE | /api/v1/tasks/{id} | Write-authorized task update/delete |
 | GET | /api/v1/search?q={query} | Authorized event/task text search |
 | POST | /api/v1/import.ics | Import supported iCalendar events |
 | GET | /api/v1/export.ics?calendar_id={id} | Export an accessible calendar |
 
-Calendar roles: owner (full control including membership), edit (modify events/tasks), read (view events/tasks and export). Sharing is local-account-only. Unauthorized calendar IDs are not disclosed.
+Calendar roles: owner (calendar and membership control), edit (change events/tasks), read (view full event/task details and ICS export) and freebusy (view occupied timestamps only). Freebusy responses are redacted: no event IDs, titles, descriptions, locations, reminders, recurrence rules, task data or searchable details; calendar descriptions and owner metadata are not returned. Freebusy members cannot export private ICS, import, or edit. Sharing is local-account-only. Unauthorized calendar IDs are not disclosed.
 
 ## Events and recurrence
 
-Event creation requires calendar_id, title, start_at, end_at; optional description, location, all_day and recurrence. Timestamps must be timezone-aware ISO 8601 and are stored as UTC. Event end must be later than start. All-day events have UTC midnight boundaries and exclusive end day.
+Event creation requires calendar_id, title, start_at, end_at; optional description, location, all_day, recurrence and reminder_minutes (null or integer 0–43200). Timestamps must be timezone-aware ISO 8601 and are stored as UTC. Event end must be later than start. All-day events have UTC midnight boundaries and exclusive end day.
 
-Event updates require current integer version; stale versions return HTTP 409. Recurrence fields: freq (DAILY, WEEKLY, MONTHLY, YEARLY), interval (1–24), count (2–366), tzid (optional IANA timezone or null). Example recurrence: {"freq":"WEEKLY","interval":1,"count":8,"tzid":"America/Chicago"}. Queries for /events use start and end timestamps, with up to 370 days per request and up to 500 returned occurrences. PATCH/DELETE act on the whole recurring series; per-instance editing is not supported.
+Event updates require current integer version; stale versions return HTTP 409. Recurrence fields: freq (DAILY, WEEKLY, MONTHLY, YEARLY), interval (1–24), count (2–366), tzid (optional IANA timezone or null). Example recurrence: {"freq":"WEEKLY","interval":1,"count":8,"tzid":"America/Chicago"}. Queries for /events use start and end timestamps, with up to 370 days per request and up to 500 returned occurrences. PATCH/DELETE act on the whole recurring series. For skip/restore, POST /api/v1/events/{id}/exclusions with JSON {"occurrence_start_at":"2026-03-08T14:00:00Z","version":1}, or DELETE with both query parameters, respectively. These operations require an exact generated occurrence, a current series version and write permission; they update the parent version when changed. GET /exclusions returns skipped start instants for editors. Changing series start/end or recurrence rules clears existing exclusions. Full per-instance event overrides remain unsupported.
 
 ## ICS portability
 
-POST /api/v1/import.ics accepts JSON with calendar_id and ics string. Limit: at most 100 events, 55,000 characters of ICS content, and 64 KiB total JSON payload. Supports iCalendar folded lines, text escaping, UID deduplication, UTC timestamps, IANA TZID, all-day dates and bounded RRULEs. Unsupported recurrence constructs are rejected rather than silently discarded. Returns imported/skipped counts.
+POST /api/v1/import.ics accepts JSON with calendar_id and ics string. Limit: at most 100 events, 55,000 characters of ICS content, and 64 KiB total JSON payload. Supports iCalendar folded lines, text escaping, UID deduplication, UTC timestamps, IANA TZID, all-day dates and bounded RRULEs. Unsupported recurrence constructs are rejected rather than silently discarded. Supported EXDATE exception lists and display VALARM relative reminders are preserved on import. Returns imported/skipped counts.
 
-GET /api/v1/export.ics emits owned or shared calendar events, preserving imported UIDs where possible, all-day date types, IANA timezone recurrence and compatible bounded RRULEs. No VTIMEZONE definitions, meeting attendees or alarm rules yet.
+GET /api/v1/export.ics emits owned or shared calendar events, preserving imported UIDs where possible, all-day date types, IANA timezone recurrence and compatible bounded RRULEs. Export includes EXDATE and a single display VALARM when present; VTIMEZONE definitions, meeting attendees and multiple or non-display alarm types are not supported.
 
 ## Search
 
@@ -45,4 +47,4 @@ GET /api/v1/search?q=TEXT uses a 2–100 character literal substring. SQL wildca
 
 ## Errors and boundaries
 
-JSON errors use a human-readable error field and relevant HTTP status. This API is not yet rate limited or wrapped in a production authentication/TLS gateway. No E2EE or externally compatible CalDAV server is claimed.
+JSON errors use a human-readable error field and relevant HTTP status. Authentication has an in-memory per-IP failed-login limit (10 attempts per five minutes), but there is no distributed production throttle or validated authentication/TLS gateway. No E2EE or externally compatible CalDAV server is claimed.
