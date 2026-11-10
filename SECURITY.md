@@ -32,3 +32,5 @@ Do not expose the Python HTTP listener directly to public or untrusted networks.
 Use an authenticated, reviewed HTTPS reverse proxy, nonprivileged service runtime, protected storage, firewall, ingress request limits, credential rotation, reliable backups and disaster-recovery tests. Complete Wardveil threat review and GoreeShield privacy review. Review session lifecycle, audit logging, brute-force resistance and trusted reverse-proxy handling. Validate each actual deployment, not only source-code tests.
 
 Do not include secrets, event details, private database files or access tokens in public issues.
+
+A manual `python -m calendar_app backup --output ...` snapshot command exists. Its output is an **unencrypted** SQLite file; safeguard it and verify recovery. Automated encrypted backup and restore acceptance are outstanding.

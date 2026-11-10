@@ -12,7 +12,7 @@ A **self-hostable, open-source calendar development preview** with a Python/SQLi
 - Responsive web month, week, agenda and task views with event editing.
 - Calendar display toggles, native-browser ICS calendar export, sign-in and sign-out.
 - Local SQLite storage, parameterized SQL, bounded JSON input and no third-party browser scripts.
-- Container configuration bound to localhost and an HTTP integration test suite.
+- Container configuration bound to localhost, an HTTP integration test suite, and a manual no-clobber SQLite snapshot command.
 
 **Not yet implemented or verified:** sharing, recurrence, all-day event UI, importing ICS, CalDAV, external synchronization, encrypted sharing, offline editing, reminders, notifications, appointment booking, public calendars, analytics and AI. Linux and Android apps still require verified installable deliverables. Photo albums are excluded.
 
@@ -55,3 +55,11 @@ This project is an early preview, **not an audited calendar vault**. There is no
 ## License
 
 MIT — see LICENSE. Third-party components, when later imported, require separate licensing and attribution review. No external calendar APIs are required by the present backend.
+
+## Backup a live SQLite database
+
+Run `python -m calendar_app backup --output /secure/location/calendar-backup.sqlite3` from a server shell. The backup uses SQLite online snapshots, checks structural integrity, and refuses to overwrite existing destinations. **The backup file is not encrypted:** keep it on protected storage and test restores in an isolated environment before relying on it.
+
+## Desktop/mobile development clients
+
+Native source is present under `linux/` (GTK4, per-user launcher) and `android/` (Java Android SDK). These are development clients, not released or runtime-accepted platforms. CI can compile the Android debug APK but that does not establish device compatibility or an approved APK delivery.

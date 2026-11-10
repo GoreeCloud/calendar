@@ -28,3 +28,9 @@ Status: Repository development branch; source-implemented features awaiting inde
 - GitHub Actions workflow for Python and JS checks.
 
 **Limitations:** This document reports source presence only. Installed and deployed runtime tests, complete visual acceptance, production security and recovery acceptance remain unverified. Android and Linux client deliverables are not implemented in this initial web/backend checkpoint.
+
+## Additional development source
+
+- Native Linux GTK4 source and per-user installation script: login, date selection, agenda list, basic event creation. Runtime/platform acceptance remains open.
+- Native Android Java/SDK project: HTTPS login, native agenda/date selection, event creation and task operations. Gradle build and device acceptance require independent evidence.
+- Manual SQLite online backup CLI with no-overwrite publication and SQLite integrity checking; encrypted backup and restore testing remain open.
