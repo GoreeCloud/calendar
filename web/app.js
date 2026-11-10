@@ -83,7 +83,7 @@ function renderCalendarList(){
         share.addEventListener("click",()=>openShare(c));
         row.append(share);
       }else{
-        const tag=el("span","share-role",c.role==="edit"?"Editor":"Read only");
+        const tag=el("span","share-role",c.role==="edit"?"Editor":c.role==="freebusy"?"Availability only":"Read only");
         row.append(tag);
       }
       list.append(row);
@@ -102,7 +102,7 @@ async function loadMembers(){
     members.forEach(member=>{
       const row=el("div","member-row");
       const name=el("div");name.append(el("strong",null,member.email),
-        el("small",null,member.role==="read"?"Read-only access":"Can edit"));
+        el("small",null,member.role==="freebusy"?"Availability only":member.role==="read"?"Read-only access":"Can edit"));
       const remove=el("button","danger","Remove");remove.type="button";
       remove.setAttribute("aria-label","Remove "+member.email);
       remove.addEventListener("click",async()=>{
@@ -120,7 +120,7 @@ function openShare(calendar){
   if(calendar.role!=="owner")return;
   state.sharingCalendar=calendar;
   $("share-calendar-name").textContent=calendar.name;
-  $("share-email").value="";$("share-role").value="read";
+  $("share-email").value="";$("share-role").value="freebusy";
   $("share-dialog").showModal();
   loadMembers();
 }
@@ -307,7 +307,7 @@ async function saveEvent(evt){
   }catch(error){toast(error.message);}
 }
 async function exportCalendar(){
-  const cid=state.calendars.find(c=>!state.hidden.has(c.id))?.id;
+  const cid=state.calendars.find(c=>!state.hidden.has(c.id)&&c.role!=="freebusy")?.id;
   if(!cid){toast("Select a visible calendar first.");return;}
   try{
     const response=await fetch("/api/v1/export.ics?calendar_id="+encodeURIComponent(cid),{headers:{Authorization:"Bearer "+state.token},redirect:"error"});
@@ -485,7 +485,7 @@ $("import-btn").addEventListener("click",()=>$("import-file").click());
 $("import-file").addEventListener("change",async ()=>{
   const input=$("import-file"),file=input.files?.[0];input.value="";
   if(!file)return;
-  const cid=state.calendars.find(c=>!state.hidden.has(c.id))?.id;
+  const cid=state.calendars.find(c=>!state.hidden.has(c.id)&&canEdit(c.id))?.id;
   if(!cid){toast("Choose a visible calendar to import into.");return;}
   if(file.size>55000){toast("Import at most 55 KB and 100 events per file.");return;}
   try{
