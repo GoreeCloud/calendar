@@ -47,3 +47,27 @@ def backup_database(source: str, destination: str) -> None:
             os.close(handle)
         if os.path.exists(temporary):
             os.unlink(temporary)
+
+
+def verify_backup(path: str) -> bool:
+    """Validate SQLite file structure without modifying or creating a database."""
+    from urllib.parse import quote
+
+    source = Path(path).expanduser()
+    if source.is_symlink() or not source.is_file():
+        raise ValueError("Backup must exist as a regular file")
+    source = source.resolve()
+    uri = "file:" + quote(str(source), safe="/") + "?mode=ro"
+    try:
+        with sqlite3.connect(uri, uri=True, timeout=20) as connection:
+            check = connection.execute("PRAGMA integrity_check").fetchone()
+            if check is None or check[0] != "ok":
+                raise ValueError("Backup integrity check failed")
+            tables = {row[0] for row in connection.execute(
+                "SELECT name FROM sqlite_master WHERE type='table'")}
+            required = {"users","sessions","calendars","events","tasks"}
+            if not required <= tables:
+                raise ValueError("Backup is not a GoreeCloud Calendar database")
+            return True
+    except sqlite3.DatabaseError:
+        raise ValueError("Backup cannot be read as a valid SQLite database") from None

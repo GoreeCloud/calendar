@@ -3,7 +3,7 @@ import argparse
 import getpass
 import os
 from .core import Failure, create_user, init_database, make_server
-from .backup import backup_database
+from .backup import backup_database, verify_backup
 
 def main():
     os.umask(0o077)
@@ -17,6 +17,8 @@ def main():
     serve.add_argument("--port", type=int, default=int(os.getenv("GC_CALENDAR_PORT", "8787")))
     backup = commands.add_parser("backup", help="Create verified no-clobber SQLite snapshot")
     backup.add_argument("--output", required=True, help="New destination path (must not exist)")
+    verify = commands.add_parser("verify-backup", help="Read-only check of a saved calendar snapshot")
+    verify.add_argument("--input", required=True, help="Existing backup path")
     args = parser.parse_args()
     if args.command == "create-admin":
         init_database(args.database)
@@ -35,6 +37,12 @@ def main():
         except (OSError, ValueError) as error:
             parser.error(str(error))
         print("SQLite snapshot created and integrity checked. Protect backup access; it is not encrypted.")
+    elif args.command == "verify-backup":
+        try:
+            verify_backup(args.input)
+        except (OSError, ValueError) as error:
+            parser.error(str(error))
+        print("SQLite backup structure and integrity checks passed. Restore testing remains a separate requirement.")
     else:
         with make_server(args.database,args.host,args.port) as server:
             print(f"GoreeCloud Calendar listening at http://{args.host}:{server.server_address[1]}")

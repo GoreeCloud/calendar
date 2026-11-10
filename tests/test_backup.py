@@ -23,6 +23,21 @@ class BackupTests(unittest.TestCase):
                 backup_database(source, output)
             self.assertEqual(Path(output).read_bytes(), data)
 
+    def test_independent_backup_verification(self):
+        from calendar_app.backup import verify_backup
+        with tempfile.TemporaryDirectory() as folder:
+            source=str(Path(folder)/"live.db")
+            good=str(Path(folder)/"good.db")
+            create_user(source,"secure@example.org","a-long-secure-password-123")
+            backup_database(source,good)
+            self.assertTrue(verify_backup(good))
+            bad=Path(folder)/"corrupted.db"
+            bad.write_bytes(b"not a sqlite file")
+            with self.assertRaises(ValueError):
+                verify_backup(str(bad))
+            with self.assertRaises(ValueError):
+                verify_backup(str(Path(folder)/"missing.db"))
+
     def test_rejects_missing_source(self):
         with tempfile.TemporaryDirectory() as folder:
             with self.assertRaises(ValueError):
