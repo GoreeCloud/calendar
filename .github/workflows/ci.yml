@@ -15,6 +15,27 @@ jobs:
       - run: python -m compileall -q calendar_app tests linux
       - run: python -m unittest discover -s tests -v
       - run: python -m calendar_app --help
+  container:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - name: Validate local Compose configuration
+        run: docker compose config --quiet
+      - name: Build self-hosted service image
+        run: docker build --pull -t goreecloud-calendar:ci .
+      - name: Verify server container readiness
+        run: |
+          docker run -d --name calendar-smoke -p 127.0.0.1:18787:8787 goreecloud-calendar:ci
+          trap 'docker rm -f calendar-smoke >/dev/null 2>&1 || true' EXIT
+          for attempt in $(seq 1 20); do
+            if curl --fail --silent --show-error http://127.0.0.1:18787/readyz; then
+              echo "Calendar server readiness confirmed"
+              exit 0
+            fi
+            sleep 1
+          done
+          docker logs calendar-smoke
+          exit 1
   web:
     runs-on: ubuntu-latest
     steps:
