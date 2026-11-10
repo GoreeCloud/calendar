@@ -495,6 +495,42 @@ class CalendarAPITests(unittest.TestCase):
         result=self.request("GET","/api/v1/tasks",self.owner)[1]["tasks"]
         self.assertEqual(next(t["priority"] for t in result if t["id"]==urgent["id"]),4)
 
+    def test_all_day_availability_uses_local_midnights_and_dst(self):
+        cid=self.calendar(self.owner)
+        self.assertEqual(self.request("POST","/api/v1/events",self.owner,{
+            "calendar_id":cid,"title":"Whole day",
+            "start_at":"2026-11-10T00:00:00Z","end_at":"2026-11-11T00:00:00Z",
+            "all_day":True})[0],201)
+        chicago=("/api/v1/availability?calendar_id="+cid+
+            "&start=2026-11-10T06:00:00Z&end=2026-11-11T06:00:00Z"
+            "&tzid=America%2FChicago")
+        status,result=self.request("GET",chicago,self.owner)
+        self.assertEqual(status,200,result)
+        self.assertEqual(result["busy"],[{
+            "start_at":"2026-11-10T06:00:00Z",
+            "end_at":"2026-11-11T06:00:00Z"}])
+        tokyo=("/api/v1/availability?calendar_id="+cid+
+            "&start=2026-11-09T15:00:00Z&end=2026-11-10T15:00:00Z"
+            "&tzid=Asia%2FTokyo")
+        self.assertEqual(self.request("GET",tokyo,self.owner)[1]["busy"],[{
+            "start_at":"2026-11-09T15:00:00Z",
+            "end_at":"2026-11-10T15:00:00Z"}])
+        self.assertEqual(self.request("GET",chicago.replace("America%2FChicago","Unknown%2FZone"),
+                         self.owner)[0],400)
+        status,new=self.request("POST","/api/v1/events",self.owner,{
+            "calendar_id":cid,"title":"DST start",
+            "start_at":"2026-03-08T00:00:00Z","end_at":"2026-03-09T00:00:00Z",
+            "all_day":True})
+        self.assertEqual(status,201)
+        spring=("/api/v1/availability?calendar_id="+cid+
+            "&start=2026-03-08T06:00:00Z&end=2026-03-09T05:00:00Z"
+            "&tzid=America%2FChicago")
+        status,result=self.request("GET",spring,self.owner)
+        self.assertEqual(status,200,result)
+        self.assertEqual(result["busy"],[{
+            "start_at":"2026-03-08T06:00:00Z",
+            "end_at":"2026-03-09T05:00:00Z"}])
+
     def test_logout_and_security_headers(self):
         self.assertEqual(self.request("GET","/api/v1/calendars")[0],401)
         self.assertEqual(self.request("POST","/api/v1/register",body={})[0],401)

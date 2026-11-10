@@ -438,16 +438,30 @@ class CalendarHandler(BaseHTTPRequestHandler):
                 upper=dt.datetime.fromisoformat(end.replace("Z","+00:00"))
                 if upper<=lower or upper-lower>dt.timedelta(days=90):
                     raise Failure(400,"Availability window must be within 90 days")
-                single=db.execute("SELECT e.start_at,e.end_at FROM events e "
+                tzid=args.get("tzid",[None])[0]
+                if tzid:
+                    from zoneinfo import ZoneInfo,ZoneInfoNotFoundError
+                    if len(tzid)>100 or ".." in tzid:
+                        raise Failure(400,"Invalid availability timezone")
+                    try:
+                        ZoneInfo(tzid)
+                    except (ZoneInfoNotFoundError,ValueError,KeyError):
+                        raise Failure(400,"Unsupported availability timezone") from None
+                # Include adjacent UTC dates: local all-day boundaries shift
+                # by their timezone offset, especially across DST changes.
+                padding=dt.timedelta(days=2) if tzid else dt.timedelta()
+                scan_start=(lower-padding).isoformat(timespec="seconds").replace("+00:00","Z")
+                scan_end=(upper+padding).isoformat(timespec="seconds").replace("+00:00","Z")
+                single=db.execute("SELECT e.start_at,e.end_at,e.all_day FROM events e "
                     "LEFT JOIN event_recurrence r ON r.event_id=e.id "
                     "WHERE e.calendar_id=? AND r.event_id IS NULL "
-                    "AND e.start_at<? AND e.end_at>? LIMIT 501",(cid,end,start)).fetchall()
+                    "AND e.start_at<? AND e.end_at>? LIMIT 501",(cid,scan_end,scan_start)).fetchall()
                 if len(single)>500:
                     raise Failure(413,"Too many events for availability window")
                 events=[dict(row) for row in single]
                 recurring=db.execute("SELECT e.*,r.rule_json FROM events e "
                     "JOIN event_recurrence r ON r.event_id=e.id "
-                    "WHERE e.calendar_id=? AND e.start_at<? LIMIT 501",(cid,end)).fetchall()
+                    "WHERE e.calendar_id=? AND e.start_at<? LIMIT 501",(cid,scan_end)).fetchall()
                 if len(recurring)>500:
                     raise Failure(413,"Too many recurring series")
                 from .recurrence import expand,RecurrenceError
@@ -458,8 +472,9 @@ class CalendarHandler(BaseHTTPRequestHandler):
                         "SELECT occurrence_at FROM event_exclusions WHERE event_id=?",(event["id"],))}
                     try:
                         events.extend({
-                            "start_at":item["start_at"],"end_at":item["end_at"]
-                        } for item in expand(event,rule,lower,upper)
+                            "start_at":item["start_at"],"end_at":item["end_at"],
+                            "all_day":item["all_day"]
+                        } for item in expand(event,rule,lower-padding,upper+padding)
                           if item["occurrence_start_at"] not in exclusions)
                     except RecurrenceError:
                         raise Failure(422,"Corrupt recurrence in availability window") from None
@@ -467,7 +482,7 @@ class CalendarHandler(BaseHTTPRequestHandler):
                         raise Failure(413,"Too many events for availability window")
                 from .availability import busy_intervals
                 return self._send(200,{"calendar_id":cid,"start":start,"end":end,
-                    "busy":busy_intervals(events,start,end)})
+                    "busy":busy_intervals(events,start,end,tzid)})
             if path == "/api/v1/search" and method == "GET":
                 args=parse_qs(route.query)
                 query=args.get("q",[""])[0].strip()

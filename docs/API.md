@@ -61,3 +61,7 @@ Task creation supports optional integer `priority` with values 1 (urgent), 2 (hi
 ## Browser availability explorer
 
 The web application supplies an authenticated date-and-calendar selection interface on top of `/api/v1/availability`, showing occupied time alongside unscheduled gaps. It does not store or publish these gaps, and does not treat them as confirmed appointment openings. The availability API enforces the same calendar-membership rules as other calendar reads.
+
+## Timezone-aware all-day availability
+
+The optional `tzid` parameter is a server-recognized IANA timezone (for example, `America/Chicago`). For all-day events stored as UTC-midnight calendar dates, the availability calculation reconstructs civil-day start and end in that timezone; this ensures that daylight-saving transitions create the correct 23- or 25-hour local day. With no `tzid`, UTC is used. The browser sends its current IANA timezone automatically. Unsupported zones return HTTP 400; timezone data must be available on the host operating system.

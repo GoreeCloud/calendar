@@ -591,7 +591,8 @@ $("availability-form").addEventListener("submit",async event=>{
   const root=$("availability-results");root.replaceChildren(el("p","muted","Checking availability…"));
   try{
     const {start,end}=availabilityDay($("availability-date").value);
-    const query=new URLSearchParams({calendar_id:cid,start:start.toISOString(),end:end.toISOString()});
+    const tzid=Intl.DateTimeFormat().resolvedOptions().timeZone||"UTC";
+    const query=new URLSearchParams({calendar_id:cid,start:start.toISOString(),end:end.toISOString(),tzid});
     const result=await api("/availability?"+query);
     if(seq!==availabilityRequest||!$("availability-dialog").open)return;
     showAvailability(result,start,end);
