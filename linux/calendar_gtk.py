@@ -143,7 +143,28 @@ class CalendarClient(Gtk.Application):
         scroll=Gtk.ScrolledWindow();scroll.set_vexpand(True)
         self.event_list=Gtk.ListBox()
         scroll.set_child(self.event_list)
-        right.append(scroll);main.append(right);outer.append(main)
+        right.append(scroll);main.append(right)
+        tabs=Gtk.Notebook()
+        tabs.append_page(main,Gtk.Label(label="Calendar"))
+        tasks_page=self.box()
+        tasks_page.set_margin_top(16)
+        tasks_header=self.box(False)
+        tasks_header.append(self.label("Tasks","title"))
+        task_spacer=self.label("");task_spacer.set_hexpand(True);tasks_header.append(task_spacer)
+        add_task=Gtk.Button(label="＋ New task")
+        add_task.connect("clicked",lambda *_:self.create_task())
+        tasks_header.append(add_task)
+        tasks_page.append(tasks_header)
+        self.task_message=self.label("")
+        tasks_page.append(self.task_message)
+        task_scroll=Gtk.ScrolledWindow();task_scroll.set_vexpand(True)
+        self.task_list=Gtk.ListBox()
+        task_scroll.set_child(self.task_list)
+        tasks_page.append(task_scroll)
+        tabs.append_page(tasks_page,Gtk.Label(label="Tasks"))
+        tabs.connect("switch-page",lambda _tabs,_page,index:
+                     self.load_tasks() if index==1 else None)
+        outer.append(tabs)
         self.window.set_child(outer)
 
     def selected_date(self):
@@ -175,6 +196,98 @@ class CalendarClient(Gtk.Application):
                 self.event_list.append(row)
             return False
         self.run_async(work,done)
+
+    def load_tasks(self):
+        token=self.token
+        if not token:
+            return
+        self.task_message.set_text("Loading tasks…")
+        def work():
+            calendars=self.request("GET","/calendars",token=token)["calendars"]
+            tasks=self.request("GET","/tasks",token=token)["tasks"]
+            return calendars,tasks
+        def done(data):
+            if self.token!=token:
+                return False
+            calendars,tasks=data
+            self.calendars=calendars
+            editable={c["id"] for c in calendars if c.get("role") in ("owner","edit")}
+            child=self.task_list.get_first_child()
+            while child:
+                next_child=child.get_next_sibling()
+                self.task_list.remove(child)
+                child=next_child
+            self.task_message.set_text("")
+            if not tasks:
+                self.task_list.append(self.label("No tasks yet.","hint"))
+            for task in sorted(tasks,key=lambda t:(int(t["done"]),int(t.get("priority",3)),
+                                                 t.get("due_at") or "9999")):
+                row=self.box(False)
+                checkbox=Gtk.CheckButton()
+                checkbox.set_active(bool(task["done"]))
+                checkbox.set_sensitive(task["calendar_id"] in editable)
+                checkbox.set_tooltip_text("Read-only calendar" if task["calendar_id"] not in editable
+                                          else "Mark task complete")
+                heading=task["title"]+"  ·  P"+str(task.get("priority",3))
+                if task.get("due_at"):
+                    due=dt.datetime.fromisoformat(task["due_at"].replace("Z","+00:00")).astimezone()
+                    heading+="  ·  Due "+due.strftime("%b %d %I:%M %p")
+                label=self.label(heading)
+                label.set_wrap(True)
+                label.set_hexpand(True)
+                row.append(checkbox)
+                row.append(label)
+                def toggle(control,tid=task["id"]):
+                    target=control.get_active()
+                    self.run_async(
+                        lambda:self.request("PATCH","/tasks/"+tid,{"done":target},token=token),
+                        lambda _:self.load_tasks() or False)
+                checkbox.connect("toggled",toggle)
+                row.set_margin_top(8);row.set_margin_bottom(8)
+                self.task_list.append(row)
+            return False
+        self.run_async(work,done)
+
+    def create_task(self):
+        editable=[c for c in self.calendars if c.get("role") in ("owner","edit")]
+        if not editable:
+            self.task_message.set_text("No editable calendar is available.")
+            return
+        dialog=Gtk.Window(transient_for=self.window,modal=True,title="New task")
+        dialog.set_default_size(380,300)
+        content=self.box()
+        content.set_margin_top(20);content.set_margin_bottom(20)
+        content.set_margin_start(20);content.set_margin_end(20)
+        content.append(self.label("New task","title"))
+        name=Gtk.Entry();name.set_placeholder_text("What needs doing?")
+        content.append(name)
+        content.append(self.label("Priority"))
+        priority=Gtk.ComboBoxText()
+        for caption in ("P1 · Urgent","P2 · High","P3 · Normal","P4 · Low"):
+            priority.append_text(caption)
+        priority.set_active(2)
+        content.append(priority)
+        message=self.label("")
+        content.append(message)
+        save=Gtk.Button(label="Create task")
+        save.add_css_class("suggested-action")
+        def submit(_):
+            title=name.get_text().strip()
+            if not title:
+                message.set_text("Enter a task name.")
+                return
+            payload={"calendar_id":editable[0]["id"],"title":title,
+                     "priority":priority.get_active()+1}
+            message.set_text("Saving…")
+            def done(_result):
+                dialog.close()
+                self.load_tasks()
+                return False
+            self.run_async(lambda:self.request("POST","/tasks",payload,token=self.token),done)
+        save.connect("clicked",submit)
+        content.append(save)
+        dialog.set_child(content)
+        dialog.present()
 
     def create_event(self):
         editable=[c for c in self.calendars if c.get("role","owner") in ("owner","edit")]

@@ -13,10 +13,12 @@ import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.Button;
+import android.widget.ArrayAdapter;
 import android.widget.CheckBox;
 import android.widget.EditText;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
+import android.widget.Spinner;
 import android.widget.TextView;
 import org.json.JSONArray;
 import org.json.JSONObject;
@@ -380,11 +382,26 @@ public final class MainActivity extends Activity {
         if(sessionToken==null)return;
         status.setText("Loading tasks…");
         final String token=sessionToken;
-        perform(() -> request("GET","/tasks",null,token),result->{
+        perform(() -> {
+            JSONArray calendars=request("GET","/calendars",null,token).getJSONArray("calendars");
+            JSONArray tasks=request("GET","/tasks",null,token).getJSONArray("tasks");
+            return new JSONObject().put("calendars",calendars).put("tasks",tasks);
+        },result->{
             if(!activeTab.equals("tasks")||!token.equals(sessionToken))return;
             status.setText("");
             resultContainer.removeAllViews();
             JSONArray tasks=result.getJSONArray("tasks");
+            JSONArray calendars=result.getJSONArray("calendars");
+            java.util.HashSet<String> writable=new java.util.HashSet<>();
+            for(int i=0;i<calendars.length();i++){
+                JSONObject calendar=calendars.getJSONObject(i);
+                String role=calendar.optString("role","");
+                if(role.equals("owner")||role.equals("edit")){
+                    String id=calendar.getString("id");
+                    writable.add(id);
+                    if(selectedCalendarId==null)selectedCalendarId=id;
+                }
+            }
             LinearLayout list=card(16);
             list.addView(text("Tasks",19,true));
             if(tasks.length()==0)list.addView(text("All caught up.",14,false));
@@ -392,8 +409,12 @@ public final class MainActivity extends Activity {
                 JSONObject task=tasks.getJSONObject(i);
                 String name=task.getString("title");
                 boolean done=task.getInt("done")!=0;
-                Button taskButton=button((done?"✓  ":"○  ")+name,false);
-                LinearLayout.LayoutParams params=new LinearLayout.LayoutParams(-1,dp(52));
+                int priority=task.optInt("priority",3);
+                String due=task.isNull("due_at")?"":"  ·  due "+task.optString("due_at","");
+                Button taskButton=button((done?"✓  ":"○  ")+
+                    "P"+priority+"  ·  "+name+due,false);
+                taskButton.setEnabled(writable.contains(task.getString("calendar_id")));
+                LinearLayout.LayoutParams params=new LinearLayout.LayoutParams(-1,dp(60));
                 params.topMargin=dp(8);
                 list.addView(taskButton,params);
                 String id=task.getString("id");
@@ -406,15 +427,29 @@ public final class MainActivity extends Activity {
     }
 
     private void newTask() {
-        if(selectedCalendarId==null){showError("No calendar is available.");return;}
-        EditText field=edit("New task",false);
-        new AlertDialog.Builder(this).setTitle("New task").setView(field)
+        if(selectedCalendarId==null){showError("No editable calendar is available.");return;}
+        LinearLayout form=column();
+        form.setPadding(dp(18),dp(6),dp(18),dp(6));
+        EditText field=edit("Task title",false);
+        form.addView(field);
+        Spinner tier=new Spinner(this);
+        String[] priorities={"P1 · Urgent","P2 · High","P3 · Normal","P4 · Low"};
+        ArrayAdapter<String> options=new ArrayAdapter<>(
+            this,android.R.layout.simple_spinner_dropdown_item,priorities);
+        tier.setAdapter(options);
+        tier.setSelection(2);
+        form.addView(tier);
+        new AlertDialog.Builder(this).setTitle("New task").setView(form)
             .setNegativeButton("Cancel",null)
             .setPositiveButton("Create",(dialog,which)->{
                 String name=field.getText().toString().trim();
-                if(name.isEmpty())return;
+                if(name.isEmpty()){showError("Task title is required.");return;}
+                final int priority=tier.getSelectedItemPosition()+1;
+                final String target=selectedCalendarId;
+                final String token=sessionToken;
                 perform(() -> request("POST","/tasks",new JSONObject()
-                    .put("title",name).put("calendar_id",selectedCalendarId),sessionToken),
+                    .put("title",name).put("calendar_id",target)
+                    .put("priority",priority),token),
                     answer->{renderDashboard();});
             }).show();
     }
