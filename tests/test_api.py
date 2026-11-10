@@ -569,6 +569,57 @@ class CalendarAPITests(unittest.TestCase):
                          {"revoked":0})
         self.assertEqual(self.request("POST","/api/v1/sessions/revoke-others")[0],401)
 
+    def test_suggestions_respect_permissions_and_merge_calendar_conflicts(self):
+        cid=self.calendar(self.owner)
+        status,new=self.request("POST","/api/v1/calendars",self.owner,
+            {"name":"Additional schedule"})
+        self.assertEqual(status,201,new)
+        second=new["id"]
+        for calendar_id,start_at,end_at in [
+            (cid,"2026-11-10T15:00:00Z","2026-11-10T16:00:00Z"),
+            (second,"2026-11-10T16:00:00Z","2026-11-10T17:00:00Z")
+        ]:
+            self.assertEqual(self.request("POST","/api/v1/events",self.owner,{
+                "calendar_id":calendar_id,"title":"Private details",
+                "start_at":start_at,"end_at":end_at})[0],201)
+        base=("/api/v1/suggestions?calendar_ids="+cid+","+second+
+              "&start=2026-11-10T06:00:00Z&end=2026-11-11T06:00:00Z"+
+              "&tzid=America%2FChicago&duration_minutes=60")
+        self.assertEqual(self.request("GET",base,self.other)[0],404)
+        status,response=self.request("GET",base,self.owner)
+        self.assertEqual(status,200,response)
+        self.assertEqual(response["calendar_count"],2)
+        self.assertEqual(response["slots"][0],{
+            "start_at":"2026-11-10T17:00:00Z","end_at":"2026-11-10T18:00:00Z"})
+        self.assertNotIn("Private details",str(response))
+        self.assertEqual(self.request("POST","/api/v1/calendars/"+cid+"/members",self.owner,{
+            "email":"other@example.test","role":"freebusy"})[0],200)
+        single=base.replace(cid+","+second,cid)
+        status,member=self.request("GET",single,self.other)
+        self.assertEqual(status,200,member)
+        self.assertIn("slots",member)
+        self.assertNotIn("title",str(member))
+        self.assertEqual(self.request("GET",base.replace("&duration_minutes=60",
+                         "&duration_minutes=61"),self.owner)[0],400)
+        self.assertEqual(self.request("GET",base.replace("America%2FChicago",
+                         "Unknown%2FZone"),self.owner)[0],400)
+
+    def test_suggestions_dismiss_all_day_and_handle_dst(self):
+        cid=self.calendar(self.owner)
+        self.assertEqual(self.request("POST","/api/v1/events",self.owner,{
+            "calendar_id":cid,"title":"Unavailable all day",
+            "start_at":"2026-03-09T00:00:00Z","end_at":"2026-03-10T00:00:00Z",
+            "all_day":True})[0],201)
+        base=("/api/v1/suggestions?calendar_ids="+cid+
+              "&start=2026-03-08T06:00:00Z&end=2026-03-10T05:00:00Z"+
+              "&tzid=America%2FChicago&duration_minutes=60")
+        status,response=self.request("GET",base,self.owner)
+        self.assertEqual(status,200,response)
+        self.assertEqual(response["slots"][0]["start_at"],"2026-03-08T14:00:00Z")
+        self.assertTrue(all(x["start_at"].startswith("2026-03-08") for x in response["slots"]))
+        self.assertEqual(self.request("GET",base.replace(
+            "2026-03-10T05:00:00Z","2026-04-10T05:00:00Z"),self.owner)[0],400)
+
     def test_logout_and_security_headers(self):
         self.assertEqual(self.request("GET","/api/v1/calendars")[0],401)
         self.assertEqual(self.request("POST","/api/v1/register",body={})[0],401)

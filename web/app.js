@@ -629,6 +629,44 @@ $("availability-btn").addEventListener("click",()=>{
   $("availability-results").replaceChildren();
   $("availability-dialog").showModal();
 });
+$("suggest-times").addEventListener("click",async()=>{
+  const selected=$("availability-calendar").value;
+  const visible=state.calendars.filter(c=>!state.hidden.has(c.id));
+  const ids=[selected,...visible.map(c=>c.id).filter(id=>id!==selected)];
+  if(ids.length>5){
+    toast("Show at most five calendars to compare meeting times.");
+    return;
+  }
+  const request=++availabilityRequest;
+  const box=$("availability-results");
+  box.replaceChildren(el("p","muted","Finding open times…"));
+  try{
+    const {start,end}=availabilityDay($("availability-date").value);
+    const tzid=Intl.DateTimeFormat().resolvedOptions().timeZone||"UTC";
+    const query=new URLSearchParams({calendar_ids:ids.join(","),
+      start:start.toISOString(),end:end.toISOString(),tzid,
+      duration_minutes:$("availability-duration").value});
+    const result=await api("/suggestions?"+query);
+    if(request!==availabilityRequest||!$("availability-dialog").open)return;
+    box.replaceChildren(el("p","availability-summary",
+      "Suggested times across "+result.calendar_count+" calendar(s) · "+
+      result.duration_minutes+" minutes"));
+    if(!result.slots.length){
+      box.append(el("p","muted","No open time within 9 AM–5 PM. Try another date or length."));
+      return;
+    }
+    const ul=el("ul","availability-intervals");
+    result.slots.forEach(slot=>{
+      const li=el("li","availability-interval free");
+      li.append(el("strong",null,"Unscheduled"),
+        el("span",null,availabilityClock(slot.start_at)+" – "+availabilityClock(slot.end_at)));
+      ul.append(li);
+    });
+    box.append(ul,el("p","muted","These are suggestions, not confirmed bookings."));
+  }catch(error){
+    if(request===availabilityRequest)box.replaceChildren(el("p","error",error.message));
+  }
+});
 $("availability-form").addEventListener("submit",async event=>{
   event.preventDefault();
   const cid=$("availability-calendar").value,seq=++availabilityRequest;

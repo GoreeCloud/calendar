@@ -65,3 +65,7 @@ The web application supplies an authenticated date-and-calendar selection interf
 ## Timezone-aware all-day availability
 
 The optional `tzid` parameter is a server-recognized IANA timezone (for example, `America/Chicago`). For all-day events stored as UTC-midnight calendar dates, the availability calculation reconstructs civil-day start and end in that timezone; this ensures that daylight-saving transitions create the correct 23- or 25-hour local day. With no `tzid`, UTC is used. The browser sends its current IANA timezone automatically. Unsupported zones return HTTP 400; timezone data must be available on the host operating system.
+
+## Private meeting-time suggestions
+
+GET `/api/v1/suggestions` accepts 1–5 distinct comma-separated `calendar_ids`, required timezone-aware `start` and `end` (maximum seven days), an optional IANA `tzid` (UTC by default), and optional `duration_minutes` (15–240 in 15-minute increments; 30 by default). Every calendar must be authorized to the requesting user, including free/busy-only roles. It returns up to 20 candidate half-open intervals within 09:00–17:00 **local** time, excluding busy intervals, skipped recurrence instances and all-day blocked dates. It returns no event identifiers or content. This is not a booking transaction, tentative hold, invitation, resource allocator, or guarantee against subsequent updates. The browser suggests times across the selected and currently visible calendars (maximum five).

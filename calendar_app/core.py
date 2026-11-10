@@ -286,6 +286,45 @@ class CalendarHandler(BaseHTTPRequestHandler):
             raise Failure(404, "Item not found")
         return row
 
+    def _busy_calendar(self,db,cid,start,end,tzid):
+        lower=dt.datetime.fromisoformat(start.replace("Z","+00:00"))
+        upper=dt.datetime.fromisoformat(end.replace("Z","+00:00"))
+        # Include adjacent UTC dates: local all-day boundaries shift
+        # by their timezone offset, especially across DST changes.
+        padding=dt.timedelta(days=2) if tzid else dt.timedelta()
+        scan_start=(lower-padding).isoformat(timespec="seconds").replace("+00:00","Z")
+        scan_end=(upper+padding).isoformat(timespec="seconds").replace("+00:00","Z")
+        single=db.execute("SELECT e.start_at,e.end_at,e.all_day FROM events e "
+            "LEFT JOIN event_recurrence r ON r.event_id=e.id "
+            "WHERE e.calendar_id=? AND r.event_id IS NULL "
+            "AND e.start_at<? AND e.end_at>? LIMIT 501",(cid,scan_end,scan_start)).fetchall()
+        if len(single)>500:
+            raise Failure(413,"Too many events for availability window")
+        events=[dict(row) for row in single]
+        recurring=db.execute("SELECT e.*,r.rule_json FROM events e "
+            "JOIN event_recurrence r ON r.event_id=e.id "
+            "WHERE e.calendar_id=? AND e.start_at<? LIMIT 501",(cid,scan_end)).fetchall()
+        if len(recurring)>500:
+            raise Failure(413,"Too many recurring series")
+        from .recurrence import expand,RecurrenceError
+        for record in recurring:
+            event=dict(record)
+            rule=json.loads(event.pop("rule_json"))
+            exclusions={r["occurrence_at"] for r in db.execute(
+                "SELECT occurrence_at FROM event_exclusions WHERE event_id=?",(event["id"],))}
+            try:
+                events.extend({
+                    "start_at":item["start_at"],"end_at":item["end_at"],
+                    "all_day":item["all_day"]
+                } for item in expand(event,rule,lower-padding,upper+padding)
+                  if item["occurrence_start_at"] not in exclusions)
+            except RecurrenceError:
+                raise Failure(422,"Corrupt recurrence in availability window") from None
+            if len(events)>500:
+                raise Failure(413,"Too many events for availability window")
+        from .availability import busy_intervals
+        return busy_intervals(events,start,end,tzid)
+
     def do_GET(self):
         self._dispatch("GET")
     def do_POST(self):
@@ -487,42 +526,44 @@ class CalendarHandler(BaseHTTPRequestHandler):
                         ZoneInfo(tzid)
                     except (ZoneInfoNotFoundError,ValueError,KeyError):
                         raise Failure(400,"Unsupported availability timezone") from None
-                # Include adjacent UTC dates: local all-day boundaries shift
-                # by their timezone offset, especially across DST changes.
-                padding=dt.timedelta(days=2) if tzid else dt.timedelta()
-                scan_start=(lower-padding).isoformat(timespec="seconds").replace("+00:00","Z")
-                scan_end=(upper+padding).isoformat(timespec="seconds").replace("+00:00","Z")
-                single=db.execute("SELECT e.start_at,e.end_at,e.all_day FROM events e "
-                    "LEFT JOIN event_recurrence r ON r.event_id=e.id "
-                    "WHERE e.calendar_id=? AND r.event_id IS NULL "
-                    "AND e.start_at<? AND e.end_at>? LIMIT 501",(cid,scan_end,scan_start)).fetchall()
-                if len(single)>500:
-                    raise Failure(413,"Too many events for availability window")
-                events=[dict(row) for row in single]
-                recurring=db.execute("SELECT e.*,r.rule_json FROM events e "
-                    "JOIN event_recurrence r ON r.event_id=e.id "
-                    "WHERE e.calendar_id=? AND e.start_at<? LIMIT 501",(cid,scan_end)).fetchall()
-                if len(recurring)>500:
-                    raise Failure(413,"Too many recurring series")
-                from .recurrence import expand,RecurrenceError
-                for record in recurring:
-                    event=dict(record)
-                    rule=json.loads(event.pop("rule_json"))
-                    exclusions={r["occurrence_at"] for r in db.execute(
-                        "SELECT occurrence_at FROM event_exclusions WHERE event_id=?",(event["id"],))}
-                    try:
-                        events.extend({
-                            "start_at":item["start_at"],"end_at":item["end_at"],
-                            "all_day":item["all_day"]
-                        } for item in expand(event,rule,lower-padding,upper+padding)
-                          if item["occurrence_start_at"] not in exclusions)
-                    except RecurrenceError:
-                        raise Failure(422,"Corrupt recurrence in availability window") from None
-                    if len(events)>500:
-                        raise Failure(413,"Too many events for availability window")
-                from .availability import busy_intervals
                 return self._send(200,{"calendar_id":cid,"start":start,"end":end,
-                    "busy":busy_intervals(events,start,end,tzid)})
+                    "busy":self._busy_calendar(db,cid,start,end,tzid)})
+            if path == "/api/v1/suggestions" and method == "GET":
+                args=parse_qs(route.query)
+                raw_ids=args.get("calendar_ids",[""])[0].split(",")
+                if not 1<=len(raw_ids)<=5 or any(not re.fullmatch("[0-9a-f]{32}",x)
+                                                 for x in raw_ids) or len(set(raw_ids))!=len(raw_ids):
+                    raise Failure(400,"Select one to five distinct calendar IDs")
+                # Authorize every calendar before retrieving any occupied time.
+                for selected_id in raw_ids:
+                    self._accessible_calendar(db,user,selected_id)
+                start=_stamp(args.get("start",[None])[0])
+                end=_stamp(args.get("end",[None])[0])
+                lower=dt.datetime.fromisoformat(start.replace("Z","+00:00"))
+                upper=dt.datetime.fromisoformat(end.replace("Z","+00:00"))
+                if upper<=lower or upper-lower>dt.timedelta(days=7):
+                    raise Failure(400,"Suggestions require a window of seven days or less")
+                tzid=args.get("tzid",["UTC"])[0]
+                from zoneinfo import ZoneInfo,ZoneInfoNotFoundError
+                if not isinstance(tzid,str) or len(tzid)>100 or ".." in tzid:
+                    raise Failure(400,"Invalid suggestions timezone")
+                try:
+                    zone=ZoneInfo(tzid)
+                except (ZoneInfoNotFoundError,KeyError,ValueError):
+                    raise Failure(400,"Unsupported suggestions timezone") from None
+                try:
+                    duration=int(args.get("duration_minutes",["30"])[0])
+                except ValueError:
+                    raise Failure(400,"Invalid suggestion duration") from None
+                if not 15<=duration<=240 or duration%15:
+                    raise Failure(400,"Duration must be 15–240 minutes, in 15-minute steps")
+                busy=[]
+                for selected_id in raw_ids:
+                    busy.extend(self._busy_calendar(db,selected_id,start,end,tzid))
+                from .suggestions import suggest_slots
+                slots=suggest_slots(busy,start,end,zone,duration)
+                return self._send(200,{"calendar_count":len(raw_ids),"duration_minutes":duration,
+                    "tzid":tzid,"slots":slots})
             if path == "/api/v1/search" and method == "GET":
                 args=parse_qs(route.query)
                 query=args.get("q",[""])[0].strip()
