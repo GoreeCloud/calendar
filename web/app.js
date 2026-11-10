@@ -4,7 +4,7 @@ const $ = id => document.getElementById(id);
 const state = {
   token: sessionStorage.getItem("gc-calendar-token"),
   calendars: [], events: [], tasks: [], view: "month",
-  anchor: new Date(), hidden: new Set(), editing: null, sharingCalendar: null, loading: false
+  anchor: new Date(), hidden: new Set(), editing: null, editingTask: null, sharingCalendar: null, loading: false
 };
 const byDay = d => new Date(d.getFullYear(),d.getMonth(),d.getDate());
 const addDays = (d,n) => {const v=byDay(d);v.setDate(v.getDate()+n);return v;};
@@ -206,8 +206,13 @@ function renderTasks(){
     if(t.due_at)name.append(el("small",null,"Due "+new Date(t.due_at).toLocaleString()));
     const del=el("button",null,"Delete");del.setAttribute("aria-label","Delete "+t.title);
     del.addEventListener("click",async()=>{if(!confirm("Delete this task?"))return;try{await api("/tasks/"+t.id,{method:"DELETE"});await refresh();}catch(error){toast(error.message);}});
-    if(!canEdit(t.calendar_id))del.hidden=true;
-    row.append(check,name,del);ul.append(row);
+    row.append(check,name);
+    if(canEdit(t.calendar_id)){
+      const edit=el("button",null,"Edit");edit.setAttribute("aria-label","Edit "+t.title);
+      edit.addEventListener("click",()=>openTask(t));
+      row.append(edit,del);
+    }
+    ul.append(row);
   });
   root.append(ul);$("main-view").replaceChildren(root);
 }
@@ -243,10 +248,18 @@ function openEvent(event=null,date=new Date()){
   $("event-form").querySelectorAll("input,textarea,select").forEach(control=>control.disabled=readOnly);
   $("event-dialog").showModal();$("event-title").focus();
 }
-function openTask(){
-  if(!state.calendars.some(c=>canEdit(c.id))){toast("No editable calendar is available.");return;}
-  fillCalendars($("task-calendar"));
-  $("task-title").value="";$("task-due").value="";$("task-dialog").showModal();$("task-title").focus();
+function openTask(task=null){
+  if(task&&!canEdit(task.calendar_id)){toast("This task belongs to a read-only calendar.");return;}
+  if(!task&&!state.calendars.some(c=>canEdit(c.id))){toast("No editable calendar is available.");return;}
+  state.editingTask=task;
+  fillCalendars($("task-calendar"),Boolean(task));
+  $("task-dialog-title").textContent=task?"Edit task":"New task";
+  $("task-save").textContent=task?"Save task":"Add task";
+  $("task-title").value=task?.title||"";
+  $("task-due").value=task?.due_at?localField(new Date(task.due_at)):"";
+  $("task-calendar").value=task?.calendar_id||state.calendars.find(c=>canEdit(c.id))?.id||"";
+  $("task-calendar").disabled=Boolean(task);
+  $("task-dialog").showModal();$("task-title").focus();
 }
 async function saveEvent(evt){
   evt.preventDefault();
@@ -335,8 +348,17 @@ $("calendar-form").addEventListener("submit",async e=>{
   $("calendar-dialog").close();$("calendar-name").value="";await refresh();toast("Calendar created.");}catch(error){toast(error.message);}
 });
 $("task-form").addEventListener("submit",async e=>{
-  e.preventDefault();try{await api("/tasks",{method:"POST",body:{title:$("task-title").value,calendar_id:$("task-calendar").value,due_at:$("task-due").value?new Date($("task-due").value).toISOString():null}});
-  $("task-dialog").close();await refresh();toast("Task added.");}catch(error){toast(error.message);}
+  e.preventDefault();
+  const title=$("task-title").value;
+  const due_at=$("task-due").value?new Date($("task-due").value).toISOString():null;
+  try{
+    if(state.editingTask){
+      await api("/tasks/"+state.editingTask.id,{method:"PATCH",body:{title,due_at}});
+    }else{
+      await api("/tasks",{method:"POST",body:{title,due_at,calendar_id:$("task-calendar").value}});
+    }
+    $("task-dialog").close();await refresh();toast("Task saved.");
+  }catch(error){toast(error.message);}
 });
 $("event-delete").addEventListener("click",async()=>{
   if(!state.editing||!confirm("Delete this event?"))return;

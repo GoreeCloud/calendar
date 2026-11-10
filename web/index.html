@@ -122,11 +122,11 @@
   </dialog>
   <dialog id="task-dialog" class="editor-dialog">
     <form id="task-form">
-      <div class="dialog-heading"><div><span class="eyebrow">TO-DO</span><h2>New task</h2></div><button type="button" class="icon-btn" data-close="task-dialog" aria-label="Close">✕</button></div>
+      <div class="dialog-heading"><div><span class="eyebrow">TO-DO</span><h2 id="task-dialog-title">New task</h2></div><button type="button" class="icon-btn" data-close="task-dialog" aria-label="Close">✕</button></div>
       <label for="task-title">Task</label><input id="task-title" maxlength="160" required placeholder="What needs doing?">
       <label for="task-calendar">Calendar</label><select id="task-calendar" required></select>
       <label for="task-due">Due date (optional)</label><input id="task-due" type="datetime-local">
-      <div class="dialog-actions"><button class="secondary" type="button" data-close="task-dialog">Cancel</button><button class="primary" type="submit">Add task</button></div>
+      <div class="dialog-actions"><button class="secondary" type="button" data-close="task-dialog">Cancel</button><button class="primary" id="task-save" type="submit">Add task</button></div>
     </form>
   </dialog>
 </body>
