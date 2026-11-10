@@ -68,6 +68,9 @@ def verify_backup(path: str) -> bool:
             required = {"users","sessions","calendars","events","tasks"}
             if not required <= tables:
                 raise ValueError("Backup is not a GoreeCloud Calendar database")
+            broken_foreign_key=connection.execute("PRAGMA foreign_key_check").fetchone()
+            if broken_foreign_key is not None:
+                raise ValueError("Backup contains invalid foreign-key references")
             return True
     except sqlite3.DatabaseError:
         raise ValueError("Backup cannot be read as a valid SQLite database") from None

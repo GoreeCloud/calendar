@@ -93,6 +93,24 @@ class BackupTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 backup_database(str(Path(folder)/"missing.db"), str(Path(folder)/"backup.db"))
 
+    def test_backup_rejects_broken_foreign_key_references(self):
+        from calendar_app.backup import verify_backup,restore_database
+        with tempfile.TemporaryDirectory() as folder:
+            broken=str(Path(folder)/"broken-relations.db")
+            create_user(broken,"foreign-key@example.test","long-enough-password-123")
+            with sqlite3.connect(broken) as db:
+                db.execute("PRAGMA foreign_keys=OFF")
+                db.execute("DELETE FROM users")
+                db.commit()
+                self.assertEqual(db.execute("PRAGMA integrity_check").fetchone()[0],"ok")
+                self.assertNotEqual(db.execute("PRAGMA foreign_key_check").fetchone(),None)
+            with self.assertRaises(ValueError):
+                verify_backup(broken)
+            destination=str(Path(folder)/"recover.db")
+            with self.assertRaises(ValueError):
+                restore_database(broken,destination)
+            self.assertFalse(Path(destination).exists())
+
     def test_snapshot_includes_live_wal_changes(self):
         with tempfile.TemporaryDirectory() as folder:
             source=str(Path(folder)/"live.db")
