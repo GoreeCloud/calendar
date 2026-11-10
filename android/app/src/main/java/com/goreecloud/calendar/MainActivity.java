@@ -124,7 +124,7 @@ public final class MainActivity extends Activity {
     private Button button(String label, boolean filled) {
         Button view = new Button(this);
         view.setText(label);
-        view.setTextAllCaps(false);
+        view.setAllCaps(false);
         view.setTextSize(14);
         view.setTextColor(filled ? Color.WHITE : TEXT);
         view.setBackground(shape(filled ? ACCENT : CANVAS,13));
