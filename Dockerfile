@@ -1,4 +1,7 @@
 FROM python:3.13-slim-bookworm
+# Recurring events and civil-day availability require the IANA timezone DB.
+RUN apt-get update && apt-get install -y --no-install-recommends tzdata \
+    && rm -rf /var/lib/apt/lists/*
 WORKDIR /srv/calendar
 COPY calendar_app/ calendar_app/
 COPY web/ web/

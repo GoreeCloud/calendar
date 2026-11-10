@@ -27,6 +27,8 @@ jobs:
         run: docker compose config --quiet
       - name: Build self-hosted service image
         run: docker build --pull -t goreecloud-calendar:ci .
+      - name: Verify IANA timezone support inside container
+        run: docker run --rm goreecloud-calendar:ci python -c "from zoneinfo import ZoneInfo; assert ZoneInfo('America/Chicago').key == 'America/Chicago'"
       - name: Verify server container readiness
         run: |
           docker run -d --name calendar-smoke -p 127.0.0.1:18787:8787 goreecloud-calendar:ci
