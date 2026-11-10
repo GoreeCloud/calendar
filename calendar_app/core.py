@@ -522,25 +522,22 @@ class CalendarHandler(BaseHTTPRequestHandler):
                         (eid, cid, entry["title"], entry["description"], entry["location"],
                          entry["start_at"], entry["end_at"], int(entry["all_day"]), 1, now(), now()))
                     db.execute("INSERT INTO imported_uids VALUES(?,?,?)", (cid, entry["uid"], eid))
+                    if entry.get("recurrence") is not None:
+                        db.execute("INSERT INTO event_recurrence VALUES(?,?)",
+                                   (eid,json.dumps(entry["recurrence"])))
                     imported += 1
                 db.commit()
                 return self._send(201, {"imported": imported, "skipped": skipped})
             if path == "/api/v1/export.ics" and method == "GET":
                 cid = parse_qs(route.query).get("calendar_id", [None])[0]
                 self._accessible_calendar(db, user, cid or "")
-                entries = db.execute("SELECT * FROM events WHERE calendar_id=? ORDER BY start_at", (cid,))
-                lines = ["BEGIN:VCALENDAR","VERSION:2.0","PRODID:-//GoreeCloud//Calendar//EN"]
-                for event in entries:
-                    def timefield(key):
-                        return event[key].replace("-","").replace(":","").replace("Z","Z")
-                    lines.extend(["BEGIN:VEVENT","UID:"+event["id"]+"@goreecloud.local",
-                        "DTSTAMP:"+now().replace("-","").replace(":",""),
-                        "DTSTART:"+timefield("start_at"),"DTEND:"+timefield("end_at"),
-                        "SUMMARY:"+_ical_text(event["title"]),
-                        "DESCRIPTION:"+_ical_text(event["description"]),
-                        "LOCATION:"+_ical_text(event["location"]),"END:VEVENT"])
-                lines.append("END:VCALENDAR")
-                raw = ("\r\n".join(lines)+"\r\n").encode("utf-8")
+                entries = db.execute("SELECT e.*,r.rule_json,"
+                    "(SELECT m.external_uid FROM imported_uids m WHERE m.event_id=e.id "
+                    "AND m.calendar_id=e.calendar_id LIMIT 1) AS original_uid "
+                    "FROM events e LEFT JOIN event_recurrence r ON r.event_id=e.id "
+                    "WHERE e.calendar_id=? ORDER BY e.start_at", (cid,))
+                from .ical import export_calendar
+                raw=export_calendar([dict(row) for row in entries]).encode("utf-8")
                 self._headers(200,"text/calendar; charset=utf-8",len(raw))
                 self.wfile.write(raw)
                 return

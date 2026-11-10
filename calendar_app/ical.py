@@ -99,9 +99,9 @@ def _normalize(props: dict) -> dict:
     for field in ("UID", "DTSTART", "DTEND"):
         if field not in props:
             raise ImportErrorCalendar("VEVENT requires UID, DTSTART and DTEND")
-    for field in ("RRULE", "RDATE", "EXDATE", "RECURRENCE-ID", "DURATION"):
+    for field in ("RDATE", "EXDATE", "RECURRENCE-ID", "DURATION"):
         if field in props:
-            raise ImportErrorCalendar("Recurring or duration-only events require a future import version")
+            raise ImportErrorCalendar("Recurrence exceptions and duration-only events are unsupported")
     uid = props["UID"][1].strip()
     if not uid or len(uid) > 255 or "\r" in uid or "\n" in uid:
         raise ImportErrorCalendar("Invalid event UID")
@@ -114,11 +114,35 @@ def _normalize(props: dict) -> dict:
     location = _unescape(props.get("LOCATION",({}, ""))[1])
     if not title.strip() or len(title) > 160 or len(description) > 4000 or len(location) > 500:
         raise ImportErrorCalendar("Imported event exceeds calendar field limits")
+    recurrence=None
+    if "RRULE" in props:
+        from .recurrence import validate_rule, RecurrenceError
+        fields={}
+        for item in props["RRULE"][1].split(";"):
+            if "=" not in item:
+                raise ImportErrorCalendar("Malformed RRULE")
+            key, val=item.split("=",1)
+            key=key.upper()
+            if key in fields or key not in ("FREQ","INTERVAL","COUNT"):
+                raise ImportErrorCalendar("RRULE uses unsupported parameters")
+            fields[key]=val
+        if "FREQ" not in fields or "COUNT" not in fields:
+            raise ImportErrorCalendar("RRULE requires FREQ and COUNT")
+        if not fields["COUNT"].isdigit() or not fields.get("INTERVAL","1").isdigit():
+            raise ImportErrorCalendar("Invalid RRULE interval or count")
+        try:
+            recurrence=validate_rule({
+                "freq":fields["FREQ"].upper(), "interval":int(fields.get("INTERVAL","1")),
+                "count":int(fields["COUNT"]),
+                "tzid":None if all_day else props["DTSTART"][0].get("TZID")
+            })
+        except RecurrenceError as error:
+            raise ImportErrorCalendar(str(error)) from None
     return {
         "uid":uid, "title":title.strip(), "description":description, "location":location,
         "start_at":start.astimezone(UTC).isoformat(timespec="seconds").replace("+00:00","Z"),
         "end_at":end.astimezone(UTC).isoformat(timespec="seconds").replace("+00:00","Z"),
-        "all_day":all_day
+        "all_day":all_day, "recurrence":recurrence
     }
 
 def parse_calendar(content: str) -> list[dict]:
@@ -161,3 +185,55 @@ def parse_calendar(content: str) -> list[dict]:
     if not events:
         raise ImportErrorCalendar("Calendar contains no supported events")
     return events
+
+def _fold(line: str) -> list[str]:
+    """Fold physical lines to at most 75 UTF-8 octets (RFC 5545)."""
+    chunks, current, length = [], "", 0
+    for char in line:
+        n=len(char.encode("utf-8"))
+        if length+n>75:
+            chunks.append(current)
+            current=" "+char
+            length=1+n
+        else:
+            current+=char
+            length+=n
+    chunks.append(current)
+    return chunks
+
+def _escape(value: str) -> str:
+    return (value.replace("\\","\\\\").replace("\r","")
+            .replace("\n","\\n").replace(";","\\;").replace(",","\\,"))
+
+def export_calendar(entries: list[dict]) -> str:
+    """Export owned or shared calendar events, all-day dates and bounded RRULEs."""
+    import json
+    lines=["BEGIN:VCALENDAR","VERSION:2.0","PRODID:-//GoreeCloud//Calendar//EN"]
+    timestamp=dt.datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
+    for event in entries:
+        uid=event.get("original_uid") or (event["id"]+"@goreecloud.local")
+        start=dt.datetime.fromisoformat(event["start_at"].replace("Z","+00:00"))
+        end=dt.datetime.fromisoformat(event["end_at"].replace("Z","+00:00"))
+        rule=json.loads(event["rule_json"]) if event.get("rule_json") else None
+        if event["all_day"]:
+            start_line="DTSTART;VALUE=DATE:"+start.strftime("%Y%m%d")
+            end_line="DTEND;VALUE=DATE:"+end.strftime("%Y%m%d")
+        elif rule and rule.get("tzid"):
+            tz=ZoneInfo(rule["tzid"])
+            start_line="DTSTART;TZID="+rule["tzid"]+":"+start.astimezone(tz).strftime("%Y%m%dT%H%M%S")
+            end_line="DTEND;TZID="+rule["tzid"]+":"+end.astimezone(tz).strftime("%Y%m%dT%H%M%S")
+        else:
+            start_line="DTSTART:"+start.strftime("%Y%m%dT%H%M%SZ")
+            end_line="DTEND:"+end.strftime("%Y%m%dT%H%M%SZ")
+        lines.extend(["BEGIN:VEVENT","UID:"+_escape(uid),"DTSTAMP:"+timestamp,
+                      start_line,end_line,"SUMMARY:"+_escape(event["title"]),
+                      "DESCRIPTION:"+_escape(event["description"]),
+                      "LOCATION:"+_escape(event["location"])])
+        if rule:
+            lines.append("RRULE:FREQ="+rule["freq"]+";INTERVAL="+str(rule["interval"])+";COUNT="+str(rule["count"]))
+        lines.append("END:VEVENT")
+    lines.append("END:VCALENDAR")
+    physical=[]
+    for line in lines:
+        physical.extend(_fold(line))
+    return "\r\n".join(physical)+"\r\n"

@@ -119,7 +119,7 @@ class CalendarAPITests(unittest.TestCase):
     def test_ics_rejects_unsupported_recurrence_and_bad_dates(self):
         cid=self.calendar(self.owner)
         base="BEGIN:VCALENDAR\\nBEGIN:VEVENT\\nUID:a@b\\nDTSTART:20261110T090000Z\\nDTEND:20261110T100000Z\\nSUMMARY:Test\\n%sEND:VEVENT\\nEND:VCALENDAR\\n"
-        bad=base % "RRULE:FREQ=DAILY\\n"
+        bad=base % "RRULE:FREQ=DAILY;BYDAY=TU\\n"
         status,result=self.request("POST","/api/v1/import.ics",self.owner,
                                     {"calendar_id":cid,"ics":bad.replace("\\n","\n")})
         self.assertEqual(status,400,result)
@@ -197,6 +197,41 @@ class CalendarAPITests(unittest.TestCase):
         self.assertEqual(self.request("DELETE",members+"/"+member["user_id"],self.owner)[0],200)
         self.assertFalse(any(c["id"]==cid for c in self.request("GET","/api/v1/calendars",self.other)[1]["calendars"]))
         self.assertEqual(self.request("GET","/api/v1/events"+q,self.other)[1]["events"],[])
+
+    def test_ics_roundtrip_all_day_and_timezone_recurrence(self):
+        cid=self.calendar(self.owner)
+        self.assertEqual(self.request("POST","/api/v1/events",self.owner,{
+            "calendar_id":cid,"title":"Holiday",
+            "start_at":"2026-11-10T00:00:00Z","end_at":"2026-11-11T00:00:00Z",
+            "all_day":True
+        })[0],201)
+        self.assertEqual(self.request("POST","/api/v1/events",self.owner,{
+            "calendar_id":cid,"title":"Weekly sync",
+            "start_at":"2026-03-01T15:00:00Z","end_at":"2026-03-01T16:00:00Z",
+            "recurrence":{"freq":"WEEKLY","interval":1,"count":3,"tzid":"America/Chicago"}
+        })[0],201)
+        status,ics=self.request("GET","/api/v1/export.ics?calendar_id="+cid,self.owner,ics=True)
+        self.assertEqual(status,200)
+        self.assertIn("DTSTART;VALUE=DATE:20261110",ics)
+        self.assertIn("DTEND;VALUE=DATE:20261111",ics)
+        self.assertIn("DTSTART;TZID=America/Chicago:20260301T090000",ics)
+        self.assertIn("RRULE:FREQ=WEEKLY;INTERVAL=1;COUNT=3",ics)
+        status,new=self.request("POST","/api/v1/calendars",self.owner,
+                                 {"name":"Imported calendar"})
+        self.assertEqual(status,201)
+        newcid=new["id"]
+        status,result=self.request("POST","/api/v1/import.ics",self.owner,
+                                    {"calendar_id":newcid,"ics":ics})
+        self.assertEqual(status,201,result)
+        self.assertEqual(result["imported"],2)
+        window="?start=2026-03-01T00:00:00Z&end=2026-03-31T00:00:00Z"
+        recurring=self.request("GET","/api/v1/events"+window,self.owner)[1]["events"]
+        imported=[e for e in recurring if e["calendar_id"]==newcid]
+        self.assertEqual(len(imported),3)
+        self.assertEqual(imported[1]["start_at"],"2026-03-08T14:00:00Z")
+        imported_again=self.request("POST","/api/v1/import.ics",self.owner,
+                                    {"calendar_id":newcid,"ics":ics})[1]
+        self.assertEqual(imported_again["skipped"],2)
 
     def test_logout_and_security_headers(self):
         self.assertEqual(self.request("GET","/api/v1/calendars")[0],401)
