@@ -85,6 +85,7 @@ def validate_password(password: str) -> None:
         raise Failure(400, "Password must contain 12–128 characters")
 
 def create_user(path: str, email: str, password: str) -> str:
+    init_database(path)
     validate_password(password)
     email = email.strip().casefold()
     if not re.fullmatch(r"[^@\s]{1,128}@[^@\s]{1,190}", email):
