@@ -80,7 +80,7 @@
       <label for="event-calendar">Calendar</label><select id="event-calendar" required></select>
       <label for="event-location">Location</label><input id="event-location" maxlength="500" placeholder="Add a location">
       <label for="event-description">Details</label><textarea id="event-description" maxlength="4000" rows="3" placeholder="Add a note"></textarea>
-      <div class="dialog-actions"><button type="button" id="event-delete" class="danger" hidden>Delete event</button><span class="flex-spacer"></span><button type="button" class="secondary" data-close="event-dialog">Cancel</button><button class="primary" id="event-save" type="submit">Save event</button></div>
+      <div class="dialog-actions"><button type="button" id="event-delete" class="danger" hidden>Delete event</button><button type="button" id="event-skip" class="secondary" hidden>Skip this date</button><button type="button" id="event-skipped" class="secondary" hidden>Manage skipped dates</button><span class="flex-spacer"></span><button type="button" class="secondary" data-close="event-dialog">Cancel</button><button class="primary" id="event-save" type="submit">Save event</button></div>
     </form>
   </dialog>
   <dialog id="calendars-dialog" class="editor-dialog">
@@ -111,6 +111,11 @@
       <div id="share-members" class="share-members" aria-live="polite"></div>
       <div class="dialog-actions"><button type="button" class="secondary" data-close="share-dialog">Close</button></div>
     </form>
+  </dialog>
+  <dialog id="skipped-dialog" class="editor-dialog">
+    <div class="dialog-heading"><div><span class="eyebrow">RECURRING SERIES</span><h2>Skipped dates</h2></div><button type="button" class="icon-btn" data-close="skipped-dialog" aria-label="Close">✕</button></div>
+    <div id="skipped-list" class="share-members" aria-live="polite"></div>
+    <div class="dialog-actions"><button type="button" class="secondary" data-close="skipped-dialog">Done</button></div>
   </dialog>
   <dialog id="calendar-dialog" class="editor-dialog">
     <form id="calendar-form">

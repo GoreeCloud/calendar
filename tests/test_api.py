@@ -268,6 +268,61 @@ class CalendarAPITests(unittest.TestCase):
         status,data=self.request("GET","/readyz")
         self.assertEqual((status,data),(200,{"status":"ready"}))
 
+    def test_recurring_occurrence_skip_restore_and_roundtrip(self):
+        cid=self.calendar(self.owner)
+        status,new=self.request("POST","/api/v1/events",self.owner,{
+            "calendar_id":cid,"title":"Weekly sync",
+            "start_at":"2026-03-01T15:00:00Z","end_at":"2026-03-01T16:00:00Z",
+            "recurrence":{"freq":"WEEKLY","interval":1,"count":3,"tzid":"America/Chicago"}})
+        self.assertEqual(status,201,new)
+        eid=new["id"]
+        route="/api/v1/events/"+eid+"/exclusions"
+        second="2026-03-08T14:00:00Z"
+        window="?start=2026-03-01T00:00:00Z&end=2026-03-31T00:00:00Z"
+        events=lambda: self.request("GET","/api/v1/events"+window,self.owner)[1]["events"]
+        self.assertEqual(len(events()),3)
+        self.assertEqual(self.request("POST",route,self.owner,{"occurrence_start_at":second,"version":1})[1],
+                         {"ok":True,"changed":True,"version":2})
+        self.assertEqual([e["start_at"] for e in events()],
+                         ["2026-03-01T15:00:00Z","2026-03-15T14:00:00Z"])
+        self.assertEqual(self.request("POST",route,self.owner,{"occurrence_start_at":second,"version":1})[0],409)
+        self.assertEqual(self.request("GET",route,self.owner)[1]["exclusions"],[second])
+        self.assertEqual(self.request("POST",route,self.other,{"occurrence_start_at":second,"version":2})[0],404)
+        status,ical=self.request("GET","/api/v1/export.ics?calendar_id="+cid,self.owner,ics=True)
+        self.assertEqual(status,200)
+        self.assertIn("EXDATE;TZID=America/Chicago:20260308T090000",ical)
+        status,new_cal=self.request("POST","/api/v1/calendars",self.owner,{"name":"ICS copy"})
+        self.assertEqual(status,201)
+        status,imported=self.request("POST","/api/v1/import.ics",self.owner,
+                                     {"calendar_id":new_cal["id"],"ics":ical})
+        self.assertEqual(status,201,imported)
+        copy=[e for e in events() if e["calendar_id"]==new_cal["id"]]
+        self.assertEqual(len(copy),2)
+        self.assertEqual(self.request("DELETE",route+"?occurrence_start_at="+second+"&version=2",self.owner)[1],
+                         {"ok":True,"changed":True,"version":3})
+        self.assertEqual(len([e for e in events() if e["calendar_id"]==cid]),3)
+        self.assertEqual(self.request("GET",route,self.owner)[1]["exclusions"],[])
+
+    def test_skip_rejects_invalid_dates_and_read_only_members(self):
+        cid=self.calendar(self.owner)
+        status,created=self.request("POST","/api/v1/events",self.owner,{
+            "calendar_id":cid,"title":"Daily check",
+            "start_at":"2026-11-10T16:00:00Z","end_at":"2026-11-10T17:00:00Z",
+            "recurrence":{"freq":"DAILY","interval":1,"count":2,"tzid":None}})
+        self.assertEqual(status,201)
+        path="/api/v1/events/"+created["id"]+"/exclusions"
+        self.assertEqual(self.request("POST",path,self.owner,
+            {"occurrence_start_at":"2026-11-20T16:00:00Z","version":1})[0],400)
+        self.assertEqual(self.request("POST","/api/v1/calendars/"+cid+"/members",self.owner,
+            {"email":"other@example.test","role":"read"})[0],200)
+        self.assertEqual(self.request("POST",path,self.other,
+            {"occurrence_start_at":"2026-11-11T16:00:00Z","version":1})[0],404)
+        self.assertEqual(self.request("POST",path,self.owner,
+            {"occurrence_start_at":"2026-11-11T16:00:00Z","version":1})[0],200)
+        self.assertEqual(self.request("PATCH","/api/v1/events/"+created["id"],self.owner,
+            {"version":2,"start_at":"2026-11-10T17:00:00Z","end_at":"2026-11-10T18:00:00Z"})[0],200)
+        self.assertEqual(self.request("GET",path,self.owner)[1]["exclusions"],[])
+
     def test_logout_and_security_headers(self):
         self.assertEqual(self.request("GET","/api/v1/calendars")[0],401)
         self.assertEqual(self.request("POST","/api/v1/register",body={})[0],401)

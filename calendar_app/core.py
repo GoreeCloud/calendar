@@ -57,6 +57,11 @@ CREATE TABLE IF NOT EXISTS event_recurrence (
   event_id TEXT PRIMARY KEY REFERENCES events(id) ON DELETE CASCADE,
   rule_json TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS event_exclusions (
+  event_id TEXT NOT NULL REFERENCES events(id) ON DELETE CASCADE,
+  occurrence_at TEXT NOT NULL,
+  PRIMARY KEY (event_id, occurrence_at)
+);
 CREATE TABLE IF NOT EXISTS imported_uids (
   calendar_id TEXT NOT NULL REFERENCES calendars(id) ON DELETE CASCADE,
   external_uid TEXT NOT NULL,
@@ -429,6 +434,14 @@ class CalendarHandler(BaseHTTPRequestHandler):
                             raise Failure(422,"Cannot expand corrupted recurrence") from None
                         if len(events)>500:
                             raise Failure(413, "Window contains too many events; narrow the date range")
+                    series_ids=[record["id"] for record in recurring]
+                    if series_ids:
+                        placeholders=",".join("?" for _ in series_ids)
+                        blocked={(r["event_id"],r["occurrence_at"]) for r in db.execute(
+                            "SELECT event_id,occurrence_at FROM event_exclusions WHERE event_id IN ("+
+                            placeholders+")",series_ids)}
+                        events=[event for event in events if (
+                            event["id"],event.get("occurrence_start_at")) not in blocked]
                     events.sort(key=lambda e: (e["start_at"], e["id"]))
                     return self._send(200, {"events": events})
                 if method == "POST":
@@ -448,6 +461,60 @@ class CalendarHandler(BaseHTTPRequestHandler):
                         db.execute("INSERT INTO event_recurrence VALUES(?,?)", (eid, json.dumps(rule)))
                     db.commit()
                     return self._send(201, {"id": eid, "version": 1})
+            if path.startswith("/api/v1/events/") and path.endswith("/exclusions"):
+                eid=path.split("/")[-2]
+                old=self._owned_item(db,"events",user,eid)
+                recurrence=db.execute("SELECT rule_json FROM event_recurrence WHERE event_id=?",
+                                      (eid,)).fetchone()
+                if recurrence is None:
+                    raise Failure(400,"Event is not a recurring series")
+                if method=="GET":
+                    exclusions=db.execute("SELECT occurrence_at FROM event_exclusions "
+                        "WHERE event_id=? ORDER BY occurrence_at",(eid,))
+                    return self._send(200,{"exclusions":[r["occurrence_at"] for r in exclusions]})
+                if method not in ("POST","DELETE"):
+                    raise Failure(404,"Not found")
+                if method=="POST":
+                    body=self._body()
+                    if set(body)!={"occurrence_start_at","version"}:
+                        raise Failure(400,"Occurrence and event version required")
+                    raw=body["occurrence_start_at"]
+                    version=body["version"]
+                else:
+                    arguments=parse_qs(route.query)
+                    raw=arguments.get("occurrence_start_at",[None])[0]
+                    try:
+                        version=int(arguments.get("version",[""])[0])
+                    except ValueError:
+                        raise Failure(428,"Current event version required") from None
+                if type(version) is not int:
+                    raise Failure(428,"Current event version required")
+                occurrence=_stamp(raw)
+                if version != old["version"]:
+                    raise Failure(409,"Event was changed on another device; refresh")
+                from .recurrence import expand,RecurrenceError
+                start_at=dt.datetime.fromisoformat(occurrence.replace("Z","+00:00"))
+                try:
+                    matches=list(expand(dict(old),json.loads(recurrence["rule_json"]),
+                                       start_at,start_at+dt.timedelta(seconds=1)))
+                except RecurrenceError:
+                    raise Failure(422,"Invalid recurrence rule") from None
+                if not any(m["occurrence_start_at"]==occurrence for m in matches):
+                    raise Failure(400,"Date is not an occurrence in this series")
+                if method=="POST":
+                    changed=db.execute("INSERT OR IGNORE INTO event_exclusions(event_id,occurrence_at) "
+                                       "VALUES(?,?)",(eid,occurrence)).rowcount
+                else:
+                    changed=db.execute("DELETE FROM event_exclusions WHERE event_id=? AND occurrence_at=?",
+                                       (eid,occurrence)).rowcount
+                if changed:
+                    updated=db.execute("UPDATE events SET version=version+1,updated_at=? "
+                                       "WHERE id=? AND version=?",(now(),eid,version))
+                    if updated.rowcount!=1:
+                        raise Failure(409,"Event was changed on another device; refresh")
+                db.commit()
+                return self._send(200,{"ok":True,"changed":bool(changed),
+                                       "version":version+int(bool(changed))})
             if path.startswith("/api/v1/events/") and method in ("PATCH", "DELETE"):
                 eid = path.rsplit("/", 1)[-1]
                 old = self._owned_item(db, "events", user, eid)
@@ -479,6 +546,9 @@ class CalendarHandler(BaseHTTPRequestHandler):
                     "WHERE id=? AND version=?", (cid,title,desc,location,start,end,all_day,now(),eid,version))
                 if changed.rowcount != 1:
                     raise Failure(409, "Event changed; refresh")
+                if has_rule or "start_at" in payload or "end_at" in payload:
+                    # Excluded instance identifiers belong to the old recurrence layout.
+                    db.execute("DELETE FROM event_exclusions WHERE event_id=?", (eid,))
                 if has_rule:
                     db.execute("DELETE FROM event_recurrence WHERE event_id=?", (eid,))
                     if rule is not None:
@@ -555,6 +625,9 @@ class CalendarHandler(BaseHTTPRequestHandler):
                     if entry.get("recurrence") is not None:
                         db.execute("INSERT INTO event_recurrence VALUES(?,?)",
                                    (eid,json.dumps(entry["recurrence"])))
+                    for excluded in entry.get("exclusions",[]):
+                        db.execute("INSERT INTO event_exclusions(event_id,occurrence_at) VALUES(?,?)",
+                                   (eid,excluded))
                     imported += 1
                 db.commit()
                 return self._send(201, {"imported": imported, "skipped": skipped})
@@ -567,7 +640,12 @@ class CalendarHandler(BaseHTTPRequestHandler):
                     "FROM events e LEFT JOIN event_recurrence r ON r.event_id=e.id "
                     "WHERE e.calendar_id=? ORDER BY e.start_at", (cid,))
                 from .ical import export_calendar
-                raw=export_calendar([dict(row) for row in entries]).encode("utf-8")
+                records=[dict(row) for row in entries]
+                for item in records:
+                    item["exclusions"]=[r["occurrence_at"] for r in db.execute(
+                        "SELECT occurrence_at FROM event_exclusions WHERE event_id=? ORDER BY occurrence_at",
+                        (item["id"],))]
+                raw=export_calendar(records).encode("utf-8")
                 self._headers(200,"text/calendar; charset=utf-8",len(raw))
                 self.wfile.write(raw)
                 return

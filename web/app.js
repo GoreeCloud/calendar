@@ -244,6 +244,8 @@ function openEvent(event=null,date=new Date()){
   $("event-location").value=event?.location||"";
   $("event-description").value=event?.description||"";
   $("event-delete").hidden=!event||readOnly;
+  $("event-skip").hidden=!event?.recurrence||!event?.occurrence_start_at||readOnly;
+  $("event-skipped").hidden=!event?.recurrence||readOnly;
   $("event-save").hidden=readOnly;
   $("event-form").querySelectorAll("input,textarea,select").forEach(control=>control.disabled=readOnly);
   $("event-dialog").showModal();$("event-title").focus();
@@ -359,6 +361,40 @@ $("task-form").addEventListener("submit",async e=>{
     }
     $("task-dialog").close();await refresh();toast("Task saved.");
   }catch(error){toast(error.message);}
+});
+$("event-skip").addEventListener("click",async()=>{
+  const event=state.editing;
+  if(!event?.recurrence||!event.occurrence_start_at)return;
+  if(!confirm("Skip only this occurrence? The remaining series will stay scheduled."))return;
+  try{
+    await api("/events/"+event.id+"/exclusions",{method:"POST",body:{
+      occurrence_start_at:event.occurrence_start_at,version:event.version}});
+    $("event-dialog").close();await refresh();toast("This date was skipped.");
+  }catch(error){toast(error.message);}
+});
+$("event-skipped").addEventListener("click",async()=>{
+  const event=state.editing;
+  if(!event?.recurrence)return;
+  $("event-dialog").close();$("skipped-dialog").showModal();
+  const box=$("skipped-list");box.replaceChildren(el("p","muted","Loading skipped dates…"));
+  try{
+    const {exclusions}=await api("/events/"+event.id+"/exclusions");
+    box.replaceChildren();
+    if(!exclusions.length){box.append(el("p","muted","No dates are skipped."));return;}
+    exclusions.forEach(instant=>{
+      const row=el("div","member-row");
+      const caption=el("span",null,new Date(instant).toLocaleString());
+      const restore=el("button","secondary","Restore date");
+      restore.addEventListener("click",async()=>{
+        try{
+          const result=await api("/events/"+event.id+"/exclusions?"+
+            new URLSearchParams({occurrence_start_at:instant,version:String(event.version)}),{method:"DELETE"});
+          event.version=result.version;row.remove();await refresh();toast("Date restored.");
+        }catch(error){toast(error.message);}
+      });
+      row.append(caption,restore);box.append(row);
+    });
+  }catch(error){box.replaceChildren(el("p","error",error.message));}
 });
 $("event-delete").addEventListener("click",async()=>{
   if(!state.editing||!confirm("Delete this event?"))return;

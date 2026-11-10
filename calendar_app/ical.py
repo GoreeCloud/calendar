@@ -99,7 +99,7 @@ def _normalize(props: dict) -> dict:
     for field in ("UID", "DTSTART", "DTEND"):
         if field not in props:
             raise ImportErrorCalendar("VEVENT requires UID, DTSTART and DTEND")
-    for field in ("RDATE", "EXDATE", "RECURRENCE-ID", "DURATION"):
+    for field in ("RDATE", "RECURRENCE-ID", "DURATION"):
         if field in props:
             raise ImportErrorCalendar("Recurrence exceptions and duration-only events are unsupported")
     uid = props["UID"][1].strip()
@@ -138,11 +138,33 @@ def _normalize(props: dict) -> dict:
             })
         except RecurrenceError as error:
             raise ImportErrorCalendar(str(error)) from None
+    exclusions=[]
+    if "EXDATE" in props:
+        if recurrence is None:
+            raise ImportErrorCalendar("EXDATE requires a supported recurring series")
+        from .recurrence import expand
+        params,values=props["EXDATE"]
+        if not values or len(values.split(","))>366:
+            raise ImportErrorCalendar("Invalid EXDATE list")
+        for value in values.split(","):
+            instant,is_all_day=_date("EXDATE",params,value)
+            if is_all_day!=all_day:
+                raise ImportErrorCalendar("EXDATE must match event date type")
+            stamp=instant.astimezone(UTC).isoformat(timespec="seconds").replace("+00:00","Z")
+            candidate=instant.astimezone(UTC)
+            prototype={"start_at":start.astimezone(UTC).isoformat(timespec="seconds").replace("+00:00","Z"),
+                       "end_at":end.astimezone(UTC).isoformat(timespec="seconds").replace("+00:00","Z")}
+            if not any(o["occurrence_start_at"]==stamp for o in expand(
+                prototype,recurrence,candidate,candidate+dt.timedelta(seconds=1))):
+                raise ImportErrorCalendar("EXDATE is not an occurrence in the recurring series")
+            exclusions.append(stamp)
+        if len(set(exclusions))!=len(exclusions):
+            raise ImportErrorCalendar("Duplicate EXDATE")
     return {
         "uid":uid, "title":title.strip(), "description":description, "location":location,
         "start_at":start.astimezone(UTC).isoformat(timespec="seconds").replace("+00:00","Z"),
         "end_at":end.astimezone(UTC).isoformat(timespec="seconds").replace("+00:00","Z"),
-        "all_day":all_day, "recurrence":recurrence
+        "all_day":all_day, "recurrence":recurrence,"exclusions":exclusions
     }
 
 def parse_calendar(content: str) -> list[dict]:
@@ -231,6 +253,23 @@ def export_calendar(entries: list[dict]) -> str:
                       "LOCATION:"+_escape(event["location"])])
         if rule:
             lines.append("RRULE:FREQ="+rule["freq"]+";INTERVAL="+str(rule["interval"])+";COUNT="+str(rule["count"]))
+        exclusions=event.get("exclusions") or []
+        if exclusions and not rule:
+            raise ImportErrorCalendar("Cannot export recurrence exceptions for a single event")
+        if exclusions:
+            if event["all_day"]:
+                formatted=[dt.datetime.fromisoformat(t.replace("Z","+00:00")).strftime("%Y%m%d")
+                           for t in exclusions]
+                lines.append("EXDATE;VALUE=DATE:"+",".join(formatted))
+            elif rule.get("tzid"):
+                tz=ZoneInfo(rule["tzid"])
+                formatted=[dt.datetime.fromisoformat(t.replace("Z","+00:00")).astimezone(tz)
+                           .strftime("%Y%m%dT%H%M%S") for t in exclusions]
+                lines.append("EXDATE;TZID="+rule["tzid"]+":"+ ",".join(formatted))
+            else:
+                formatted=[dt.datetime.fromisoformat(t.replace("Z","+00:00")).strftime("%Y%m%dT%H%M%SZ")
+                           for t in exclusions]
+                lines.append("EXDATE:"+",".join(formatted))
         lines.append("END:VEVENT")
     lines.append("END:VCALENDAR")
     physical=[]
