@@ -177,32 +177,72 @@ class CalendarClient(Gtk.Application):
         self.run_async(work,done)
 
     def create_event(self):
-        if not self.calendars:
-            self.error("No calendars available");return
-        d=self.selected_date()
-        dialog=Gtk.Window(transient_for=self.window,modal=True,title="Add event")
-        dialog.set_default_size(430,270)
+        editable=[c for c in self.calendars if c.get("role","owner") in ("owner","edit")]
+        if not editable:
+            self.error("No editable calendar available")
+            return
+        date=self.selected_date()
+        dialog=Gtk.Window(transient_for=self.window,modal=True,title="New event")
+        dialog.set_default_size(430,430)
         area=self.box()
         area.set_margin_top(22);area.set_margin_bottom(22)
         area.set_margin_start(22);area.set_margin_end(22)
-        area.append(self.label(d.strftime("New event • %B %d"),"title"))
-        name=Gtk.Entry();name.set_placeholder_text("Event title");area.append(name)
-        area.append(self.label("Preview: 9 AM to 10 AM, local time.","hint"))
-        info=self.label("");area.append(info)
-        save=Gtk.Button(label="Save event");save.add_css_class("suggested-action")
+        area.append(self.label(date.strftime("New event • %B %d"),"title"))
+        area.append(self.label("Event title"))
+        name=Gtk.Entry()
+        name.set_placeholder_text("What's scheduled?")
+        area.append(name)
+        time_row=self.box(False)
+        start_hour=Gtk.SpinButton.new_with_range(0,23,1)
+        start_hour.set_value(9)
+        start_minute=Gtk.SpinButton.new_with_range(0,59,5)
+        start_minute.set_value(0)
+        time_row.append(self.label("Start hour (24h)"))
+        time_row.append(start_hour)
+        time_row.append(self.label("Minute"))
+        time_row.append(start_minute)
+        area.append(time_row)
+        duration_row=self.box(False)
+        duration=Gtk.SpinButton.new_with_range(15,480,15)
+        duration.set_value(60)
+        duration_row.append(self.label("Duration (minutes)"))
+        duration_row.append(duration)
+        area.append(duration_row)
+        remind=Gtk.CheckButton(label="Remind me 15 minutes before")
+        area.append(remind)
+        info=self.label("")
+        area.append(info)
+        save=Gtk.Button(label="Create event")
+        save.add_css_class("suggested-action")
         def submit(_):
-            if not name.get_text().strip():
-                info.set_text("Enter a title.");return
-            start=dt.datetime.combine(d,dt.time(9)).astimezone(dt.timezone.utc)
-            end=dt.datetime.combine(d,dt.time(10)).astimezone(dt.timezone.utc)
-            data={"calendar_id":self.calendars[0]["id"],"title":name.get_text(),
-                  "start_at":start.isoformat(),"end_at":end.isoformat()}
-            def complete(_result):
-                dialog.close();self.load_day();return False
-            info.set_text("Saving…")
-            self.run_async(lambda:self.request("POST","/events",data,token=self.token),complete)
-        save.connect("clicked",submit);area.append(save)
-        dialog.set_child(area);dialog.present()
+            title=name.get_text().strip()
+            if not title:
+                info.set_text("Enter an event title.")
+                return
+            hour=int(start_hour.get_value())
+            minute=int(start_minute.get_value())
+            duration_minutes=int(duration.get_value())
+            if not 0<=hour<24 or not 0<=minute<60 or duration_minutes<15:
+                info.set_text("Invalid start time or event duration.")
+                return
+            local_start=dt.datetime.combine(date,dt.time(hour,minute)).astimezone()
+            # Absolute duration prevents an unintended hour difference at DST.
+            begins=local_start.astimezone(dt.timezone.utc)
+            ends=begins+dt.timedelta(minutes=duration_minutes)
+            payload={"calendar_id":editable[0]["id"],"title":title,
+                     "start_at":begins.isoformat(),"end_at":ends.isoformat()}
+            if remind.get_active():
+                payload["reminder_minutes"]=15
+            info.set_text("Saving event…")
+            def done(_result):
+                dialog.close()
+                self.load_day()
+                return False
+            self.run_async(lambda:self.request("POST","/events",payload,token=self.token),done)
+        save.connect("clicked",submit)
+        area.append(save)
+        dialog.set_child(area)
+        dialog.present()
 
     def logout(self,_button):
         old=self.token

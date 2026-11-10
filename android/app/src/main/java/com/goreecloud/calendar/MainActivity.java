@@ -3,6 +3,7 @@ package com.goreecloud.calendar;
 import android.app.Activity;
 import android.app.AlertDialog;
 import android.app.DatePickerDialog;
+import android.app.TimePickerDialog;
 import android.graphics.Color;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
@@ -12,6 +13,7 @@ import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.Button;
+import android.widget.CheckBox;
 import android.widget.EditText;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
@@ -336,8 +338,16 @@ public final class MainActivity extends Activity {
         final LocalDate requestedDay=selectedDate;
         perform(() -> {
             JSONArray calendars=request("GET","/calendars",null,token).getJSONArray("calendars");
-            if(calendars.length()>0 && selectedCalendarId==null)
-                selectedCalendarId=calendars.getJSONObject(0).getString("id");
+            if(selectedCalendarId==null) {
+                for(int index=0;index<calendars.length();index++){
+                    JSONObject cal=calendars.getJSONObject(index);
+                    String role=cal.optString("role","owner");
+                    if(role.equals("owner")||role.equals("edit")){
+                        selectedCalendarId=cal.getString("id");
+                        break;
+                    }
+                }
+            }
             String start=URLEncoder.encode(queryDate(selectedDate),"UTF-8");
             String end=URLEncoder.encode(queryDate(selectedDate.plusDays(1)),"UTF-8");
             JSONObject events=request("GET","/events?start="+start+"&end="+end,null,token);
@@ -410,21 +420,38 @@ public final class MainActivity extends Activity {
     }
 
     private void newEvent() {
-        if(selectedCalendarId==null){showError("No calendar is available.");return;}
-        EditText field=edit("Event title",false);
+        if(selectedCalendarId==null){
+            showError("No editable calendar available.");return;
+        }
+        LinearLayout form=column();
+        form.setPadding(dp(18),dp(6),dp(18),dp(4));
+        EditText titleField=edit("Event title",false);
+        form.addView(titleField);
+        CheckBox remind=new CheckBox(this);
+        remind.setText("Remind me 15 minutes before");
+        remind.setTextColor(TEXT);
+        form.addView(remind);
         new AlertDialog.Builder(this).setTitle("New event • "+selectedDate)
-            .setMessage("Creates a one-hour event at 9:00 AM (local time).")
-            .setView(field).setNegativeButton("Cancel",null)
-            .setPositiveButton("Create",(dialog,which)->{
-                String title=field.getText().toString().trim();
-                if(title.isEmpty())return;
-                ZonedDateTime begin=selectedDate.atTime(9,0).atZone(ZoneId.systemDefault());
-                ZonedDateTime finish=begin.plusHours(1);
-                perform(() -> request("POST","/events",new JSONObject()
-                    .put("calendar_id",selectedCalendarId).put("title",title)
-                    .put("start_at",begin.toOffsetDateTime().toString())
-                    .put("end_at",finish.toOffsetDateTime().toString()),sessionToken),
-                    answer->{renderDashboard();});
+            .setView(form).setNegativeButton("Cancel",null)
+            .setPositiveButton("Choose time",(dialog,which)->{
+                String title=titleField.getText().toString().trim();
+                if(title.isEmpty()){showError("Event title is required.");return;}
+                new TimePickerDialog(this,(picker,hour,minute)->{
+                    ZonedDateTime begin=selectedDate.atTime(hour,minute)
+                        .atZone(ZoneId.systemDefault());
+                    ZonedDateTime finish=begin.plusHours(1);
+                    String selectedCalendar=selectedCalendarId;
+                    final String token=sessionToken;
+                    final boolean notify=remind.isChecked();
+                    perform(() -> {
+                        JSONObject payload=new JSONObject()
+                            .put("calendar_id",selectedCalendar).put("title",title)
+                            .put("start_at",begin.toOffsetDateTime().toString())
+                            .put("end_at",finish.toOffsetDateTime().toString());
+                        if(notify)payload.put("reminder_minutes",15);
+                        return request("POST","/events",payload,token);
+                    },answer->{renderDashboard();});
+                },9,0,false).show();
             }).show();
     }
 }
