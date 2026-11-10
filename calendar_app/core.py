@@ -254,7 +254,6 @@ class CalendarHandler(BaseHTTPRequestHandler):
                 token = self.headers.get("Authorization", "")[7:]
                 db.execute("DELETE FROM sessions WHERE token_hash=?",
                            (hashlib.sha256(token.encode("ascii")).hexdigest(),))
-                db.commit()
                 return self._send(200, {"ok": True})
             if path == "/api/v1/calendars":
                 if method == "GET":
@@ -272,14 +271,12 @@ class CalendarHandler(BaseHTTPRequestHandler):
                     cid = uuid.uuid4().hex
                     db.execute("INSERT INTO calendars VALUES(?,?,?,?,?,?)",
                                (cid, user, name, color, desc, now()))
-                    db.commit()
                     return self._send(201, {"id": cid})
             if path.startswith("/api/v1/calendars/") and method in ("PATCH", "DELETE"):
                 cid = path.rsplit("/", 1)[-1]
                 old = self._owned_calendar(db, user, cid)
                 if method == "DELETE":
                     db.execute("DELETE FROM calendars WHERE id=?", (cid,))
-                    db.commit()
                     return self._send(200, {"ok": True})
                 body = self._body()
                 if not body or not set(body) <= {"name", "color", "description"}:
@@ -291,7 +288,6 @@ class CalendarHandler(BaseHTTPRequestHandler):
                 desc = _text(body.get("description", old["description"]), "description", 500)
                 db.execute("UPDATE calendars SET name=?,color=?,description=? WHERE id=?",
                            (name, color, desc, cid))
-                db.commit()
                 return self._send(200, {"ok": True})
             if path == "/api/v1/events":
                 if method == "GET":
@@ -315,14 +311,12 @@ class CalendarHandler(BaseHTTPRequestHandler):
                     eid = uuid.uuid4().hex
                     db.execute("INSERT INTO events VALUES(?,?,?,?,?,?,?,?,?,?,?)",
                                (eid, cid, title, desc, location, start, end, all_day, 1, now(), now()))
-                    db.commit()
                     return self._send(201, {"id": eid, "version": 1})
             if path.startswith("/api/v1/events/") and method in ("PATCH", "DELETE"):
                 eid = path.rsplit("/", 1)[-1]
                 old = self._owned_item(db, "events", user, eid)
                 if method == "DELETE":
                     db.execute("DELETE FROM events WHERE id=?", (eid,))
-                    db.commit()
                     return self._send(200, {"ok": True})
                 payload = self._body()
                 version = payload.pop("version", None)
@@ -342,7 +336,6 @@ class CalendarHandler(BaseHTTPRequestHandler):
                     "WHERE id=? AND version=?", (cid,title,desc,location,start,end,all_day,now(),eid,version))
                 if changed.rowcount != 1:
                     raise Failure(409, "Event changed; refresh")
-                db.commit()
                 return self._send(200, {"id":eid,"version":version+1})
             if path == "/api/v1/tasks":
                 if method == "GET":
@@ -363,14 +356,12 @@ class CalendarHandler(BaseHTTPRequestHandler):
                     tid = uuid.uuid4().hex
                     db.execute("INSERT INTO tasks VALUES(?,?,?,?,?,?,?)",
                                (tid,cid,title,due,0,now(),now()))
-                    db.commit()
                     return self._send(201, {"id":tid})
             if path.startswith("/api/v1/tasks/") and method in ("PATCH", "DELETE"):
                 tid = path.rsplit("/", 1)[-1]
                 old = self._owned_item(db, "tasks", user, tid)
                 if method == "DELETE":
                     db.execute("DELETE FROM tasks WHERE id=?", (tid,))
-                    db.commit()
                     return self._send(200, {"ok": True})
                 body = self._body()
                 if not body or not set(body) <= {"title", "done", "due_at"}:
@@ -383,7 +374,6 @@ class CalendarHandler(BaseHTTPRequestHandler):
                     None if "due_at" in body else old["due_at"])
                 db.execute("UPDATE tasks SET title=?,done=?,due_at=?,updated_at=? WHERE id=?",
                            (title,int(done),due,now(),tid))
-                db.commit()
                 return self._send(200,{"ok":True})
             if path == "/api/v1/export.ics" and method == "GET":
                 cid = parse_qs(route.query).get("calendar_id", [None])[0]
