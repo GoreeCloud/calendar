@@ -233,6 +233,26 @@ class CalendarAPITests(unittest.TestCase):
                                     {"calendar_id":newcid,"ics":ics})[1]
         self.assertEqual(imported_again["skipped"],2)
 
+    def test_search_is_authenticated_scoped_and_literal(self):
+        cid=self.calendar(self.owner)
+        self.assertEqual(self.request("POST","/api/v1/events",self.owner,{
+            "calendar_id":cid,"title":"Annual planning",
+            "start_at":"2026-11-10T16:00:00Z","end_at":"2026-11-10T17:00:00Z"})[0],201)
+        self.assertEqual(self.request("POST","/api/v1/tasks",self.owner,{
+            "calendar_id":cid,"title":"Planning notes"})[0],201)
+        status,found=self.request("GET","/api/v1/search?q=planning",self.owner)
+        self.assertEqual(status,200,found)
+        self.assertEqual((len(found["events"]),len(found["tasks"])),(1,1))
+        self.assertEqual(self.request("GET","/api/v1/search?q=planning",self.other)[1],
+                         {"events":[],"tasks":[]})
+        self.assertEqual(self.request("GET","/api/v1/search?q=planning")[0],401)
+        self.assertEqual(self.request("GET","/api/v1/search?q=%25",self.owner)[0],400)
+        self.assertEqual(self.request("GET","/api/v1/search?q=%25%25",self.owner)[1],
+                         {"events":[],"tasks":[]})
+        self.assertEqual(self.request("POST","/api/v1/calendars/"+cid+"/members",self.owner,
+                         {"email":"other@example.test","role":"read"})[0],200)
+        self.assertEqual(len(self.request("GET","/api/v1/search?q=planning",self.other)[1]["events"]),1)
+
     def test_logout_and_security_headers(self):
         self.assertEqual(self.request("GET","/api/v1/calendars")[0],401)
         self.assertEqual(self.request("POST","/api/v1/register",body={})[0],401)

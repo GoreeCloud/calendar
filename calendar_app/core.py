@@ -364,6 +364,25 @@ class CalendarHandler(BaseHTTPRequestHandler):
                            (name, color, desc, cid))
                 db.commit()
                 return self._send(200, {"ok": True})
+            if path == "/api/v1/search" and method == "GET":
+                args=parse_qs(route.query)
+                query=args.get("q",[""])[0].strip()
+                if not 2<=len(query)<=100:
+                    raise Failure(400,"Search requires 2–100 characters")
+                literal=query.replace("\\","\\\\").replace("%","\\%").replace("_","\\_")
+                pattern="%"+literal+"%"
+                condition="(c.owner_id=? OR EXISTS (SELECT 1 FROM calendar_members m " \
+                          "WHERE m.calendar_id=c.id AND m.user_id=?))"
+                events=db.execute("SELECT e.* FROM events e JOIN calendars c ON e.calendar_id=c.id "
+                    "WHERE "+condition+" AND (e.title LIKE ? ESCAPE '\\' OR e.description LIKE ? ESCAPE '\\' "
+                    "OR e.location LIKE ? ESCAPE '\\') ORDER BY e.start_at LIMIT 50",
+                    (user,user,pattern,pattern,pattern)).fetchall()
+                tasks=db.execute("SELECT t.* FROM tasks t JOIN calendars c ON t.calendar_id=c.id "
+                    "WHERE "+condition+" AND t.title LIKE ? ESCAPE '\\' "
+                    "ORDER BY t.done,t.due_at,t.created_at LIMIT 50",
+                    (user,user,pattern)).fetchall()
+                return self._send(200,{"events":[dict(e) for e in events],
+                                        "tasks":[dict(t) for t in tasks]})
             if path == "/api/v1/events":
                 if method == "GET":
                     args = parse_qs(route.query)
