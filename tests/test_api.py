@@ -448,6 +448,31 @@ class CalendarAPITests(unittest.TestCase):
         self.assertEqual([x["start_at"] for x in result["busy"]],
                          ["2026-03-01T15:00:00Z","2026-03-15T14:00:00Z"])
 
+    def test_calendar_settings_restricted_to_owner_and_delete_cascades(self):
+        cid=self.calendar(self.owner)
+        othercid=self.calendar(self.other)
+        self.assertEqual(self.request("POST","/api/v1/calendars/"+cid+"/members",self.owner,
+            {"email":"other@example.test","role":"edit"})[0],200)
+        self.assertEqual(self.request("PATCH","/api/v1/calendars/"+cid,self.other,
+            {"name":"Stolen calendar"})[0],404)
+        status,data=self.request("PATCH","/api/v1/calendars/"+cid,self.owner,{
+            "name":"Team schedule","description":"A better calendar name","color":"#123abc"})
+        self.assertEqual(status,200,data)
+        current=next(c for c in self.request("GET","/api/v1/calendars",self.owner)[1]["calendars"]
+                     if c["id"]==cid)
+        self.assertEqual((current["name"],current["color"],current["description"]),
+                         ("Team schedule","#123abc","A better calendar name"))
+        self.assertEqual(self.request("PATCH","/api/v1/calendars/"+cid,self.owner,
+            {"name":"Oops","color":"javascript:invalid"})[0],400)
+        self.assertEqual(self.request("POST","/api/v1/events",self.owner,{
+            "calendar_id":cid,"title":"To be deleted",
+            "start_at":"2026-11-10T12:00:00Z","end_at":"2026-11-10T13:00:00Z"})[0],201)
+        self.assertEqual(self.request("DELETE","/api/v1/calendars/"+cid,self.other)[0],404)
+        self.assertEqual(self.request("DELETE","/api/v1/calendars/"+cid,self.owner)[0],200)
+        self.assertEqual(self.request("GET","/api/v1/calendars",self.other)[1]["calendars"][0]["id"],othercid)
+        window="?start=2026-11-10T00:00:00Z&end=2026-11-12T00:00:00Z"
+        self.assertEqual(self.request("GET","/api/v1/events"+window,self.owner)[1]["events"],[])
+
     def test_logout_and_security_headers(self):
         self.assertEqual(self.request("GET","/api/v1/calendars")[0],401)
         self.assertEqual(self.request("POST","/api/v1/register",body={})[0],401)

@@ -4,7 +4,7 @@ const $ = id => document.getElementById(id);
 const state = {
   token: sessionStorage.getItem("gc-calendar-token"),
   calendars: [], events: [], tasks: [], view: "month",
-  anchor: new Date(), hidden: new Set(), editing: null, editingTask: null, sharingCalendar: null, loading: false
+  anchor: new Date(), hidden: new Set(), editing: null, editingTask: null, editingCalendar: null, sharingCalendar: null, loading: false
 };
 const byDay = d => new Date(d.getFullYear(),d.getMonth(),d.getDate());
 const addDays = (d,n) => {const v=byDay(d);v.setDate(v.getDate()+n);return v;};
@@ -81,7 +81,10 @@ function renderCalendarList(){
         const share=el("button","share-action","Share");
         share.type="button";share.setAttribute("aria-label","Share "+c.name);
         share.addEventListener("click",()=>openShare(c));
-        row.append(share);
+        const settings=el("button","share-action","Edit");
+        settings.type="button";settings.setAttribute("aria-label","Edit "+c.name+" settings");
+        settings.addEventListener("click",()=>openCalendarSettings(c));
+        row.append(share,settings);
       }else{
         const tag=el("span","share-role",c.role==="edit"?"Editor":c.role==="freebusy"?"Availability only":"Read only");
         row.append(tag);
@@ -336,6 +339,45 @@ document.querySelectorAll("[data-view]").forEach(b=>b.addEventListener("click",(
 ["new-event","toolbar-create","mobile-create"].forEach(id=>$(id).addEventListener("click",()=>openEvent()));
 $("new-calendar").addEventListener("click",()=>$("calendar-dialog").showModal());
 $("mobile-calendars").addEventListener("click",()=>$("calendars-dialog").showModal());
+function openCalendarSettings(calendar){
+  if(calendar.role!=="owner")return;
+  state.editingCalendar=calendar;
+  $("settings-calendar-name").value=calendar.name;
+  $("settings-calendar-description").value=calendar.description||"";
+  $("settings-calendar-color").value=calendar.color;
+  $("calendar-settings-dialog").showModal();
+}
+$("calendar-settings-form").addEventListener("submit",async event=>{
+  event.preventDefault();
+  const calendar=state.editingCalendar;
+  if(!calendar||calendar.role!=="owner")return;
+  const save=$("settings-calendar-save");
+  save.disabled=true;
+  try{
+    await api("/calendars/"+calendar.id,{method:"PATCH",body:{
+      name:$("settings-calendar-name").value,
+      description:$("settings-calendar-description").value,
+      color:$("settings-calendar-color").value
+    }});
+    $("calendar-settings-dialog").close();
+    await refresh();toast("Calendar settings saved.");
+  }catch(error){toast(error.message);}
+  finally{save.disabled=false;}
+});
+$("settings-calendar-delete").addEventListener("click",async()=>{
+  const calendar=state.editingCalendar;
+  if(!calendar||calendar.role!=="owner")return;
+  if(!confirm("Permanently delete "+calendar.name+" and all of its events and tasks? This cannot be undone."))return;
+  const button=$("settings-calendar-delete");
+  button.disabled=true;
+  try{
+    await api("/calendars/"+calendar.id,{method:"DELETE"});
+    state.hidden.delete(calendar.id);
+    $("calendar-settings-dialog").close();
+    await refresh();toast("Calendar deleted.");
+  }catch(error){toast(error.message);}
+  finally{button.disabled=false;}
+});
 $("share-form").addEventListener("submit",async e=>{
   e.preventDefault();
   if(!state.sharingCalendar)return;

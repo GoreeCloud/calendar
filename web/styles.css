@@ -205,3 +205,8 @@ nav#desktop-nav{display:flex;flex-direction:column;gap:5px}
 .availability-interval.busy{border-left:4px solid var(--gc-negative)}
 .availability-interval.free{border-left:4px solid var(--gc-positive)}
 @media(max-width:520px){.availability-interval{align-items:flex-start;flex-direction:column}.availability-interval span{text-align:left}}
+
+/* Owner-only calendar settings fit narrow screens without crowding controls. */
+#calendar-settings-dialog .dialog-actions{flex-wrap:wrap}
+#calendar-settings-dialog .danger{margin-right:auto}
+@media(max-width:520px){#calendar-settings-dialog .dialog-actions .flex-spacer{display:none}}

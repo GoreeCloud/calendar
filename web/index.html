@@ -140,6 +140,19 @@
     <div id="skipped-list" class="share-members" aria-live="polite"></div>
     <div class="dialog-actions"><button type="button" class="secondary" data-close="skipped-dialog">Done</button></div>
   </dialog>
+  <dialog id="calendar-settings-dialog" class="editor-dialog">
+    <form id="calendar-settings-form">
+      <div class="dialog-heading"><div><span class="eyebrow">CALENDAR SETTINGS</span><h2>Edit calendar</h2></div><button type="button" class="icon-btn" data-close="calendar-settings-dialog" aria-label="Close">✕</button></div>
+      <label for="settings-calendar-name">Calendar name</label>
+      <input id="settings-calendar-name" maxlength="100" required>
+      <label for="settings-calendar-description">Description</label>
+      <textarea id="settings-calendar-description" maxlength="500" rows="3"></textarea>
+      <label for="settings-calendar-color">Calendar color</label>
+      <input id="settings-calendar-color" type="color">
+      <p class="muted">Deleting a calendar permanently deletes its events, tasks and sharing permissions.</p>
+      <div class="dialog-actions"><button type="button" class="danger" id="settings-calendar-delete">Delete calendar</button><span class="flex-spacer"></span><button type="button" class="secondary" data-close="calendar-settings-dialog">Cancel</button><button id="settings-calendar-save" class="primary" type="submit">Save changes</button></div>
+    </form>
+  </dialog>
   <dialog id="calendar-dialog" class="editor-dialog">
     <form id="calendar-form">
       <div class="dialog-heading"><div><span class="eyebrow">WORKSPACE</span><h2>Create calendar</h2></div><button type="button" class="icon-btn" data-close="calendar-dialog" aria-label="Close">✕</button></div>
