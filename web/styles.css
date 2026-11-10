@@ -162,3 +162,6 @@ nav#desktop-nav{display:flex;flex-direction:column;gap:5px}
 }
 @media(prefers-reduced-motion:reduce){*,*::before,*::after{transition:none!important;animation:none!important}}
 @media(forced-colors:active){.event-pill{border:1px solid ButtonText}.day.today .day-number{outline:2px solid Highlight}.mobile-dock{backdrop-filter:none}}
+
+.mobile-only{display:none}
+@media(max-width:760px){.top-actions .mobile-only{display:inline-flex;min-width:34px;min-height:36px;font-size:20px}.top-actions{flex-wrap:nowrap}}

@@ -204,6 +204,8 @@ $("login-form").addEventListener("submit",async evt=>{
   }catch(error){$("login-error").textContent=error.message;}
 });
 $("sign-out").addEventListener("click",()=>signOut());
+$("mobile-signout").addEventListener("click",()=>signOut());
+$("mobile-new-calendar").addEventListener("click",()=>$("calendar-dialog").showModal());
 $("today-btn").addEventListener("click",()=>{state.anchor=new Date();refresh();});
 $("prev-btn").addEventListener("click",()=>{const d=state.anchor;if(state.view==="month")d.setMonth(d.getMonth()-1);else d.setDate(d.getDate()-(state.view==="week"?7:30));refresh();});
 $("next-btn").addEventListener("click",()=>{const d=state.anchor;if(state.view==="month")d.setMonth(d.getMonth()+1);else d.setDate(d.getDate()+(state.view==="week"?7:30));refresh();});
