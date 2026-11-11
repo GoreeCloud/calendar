@@ -21,11 +21,11 @@ Use Authorization: Bearer TOKEN on every /api/v1 route except /login. JSON bodie
 | GET, POST | /api/v1/calendars/{id}/members | Owner-only list and set memberships |
 | DELETE | /api/v1/calendars/{id}/members/{user_id} | Owner-only revoke |
 | GET, POST | /api/v1/events | Query event window; create event |
-| PATCH, DELETE | /api/v1/events/{id} | Write-authorized event update/delete |
+| PATCH, DELETE | /api/v1/events/{id} | Write-authorized update; version required for PATCH and DELETE |
 | GET, POST | /api/v1/events/{id}/exclusions | List or skip individual dates in a recurring series (write role) |
 | DELETE | /api/v1/events/{id}/exclusions?occurrence_start_at={iso}&version={n} | Restore one previously skipped occurrence |
 | GET, POST | /api/v1/tasks | List and create tasks (optional priority 1–4) |
-| PATCH, DELETE | /api/v1/tasks/{id} | Write-authorized task update/delete (including priority 1–4) |
+| PATCH, DELETE | /api/v1/tasks/{id} | Write-authorized task updates and deletions, requiring current task version |
 | GET | /api/v1/search?q={query} | Authorized event/task text search |
 | GET | /api/v1/availability?calendar_id={id}&start={iso}&end={iso} | Authenticated merged busy intervals (all sharing roles) |
 | GET | /api/v1/suggestions?calendar_ids={ids}&start={iso}&end={iso} | Private 9 AM–5 PM scheduling candidates across authorized calendars |
@@ -39,7 +39,7 @@ Calendar roles: owner (calendar and membership control), edit (change events/tas
 
 Event creation requires calendar_id, title, start_at, end_at; optional description, location, all_day, recurrence and reminder_minutes (null or integer 0–43200). Timestamps must be timezone-aware ISO 8601 and are stored as UTC. Event end must be later than start. All-day events have UTC midnight boundaries and exclusive end day.
 
-Event updates require current integer version; stale versions return HTTP 409. Recurrence fields: freq (DAILY, WEEKLY, MONTHLY, YEARLY), interval (1–24), count (2–366), tzid (optional IANA timezone or null). Example recurrence: {"freq":"WEEKLY","interval":1,"count":8,"tzid":"America/Chicago"}. Queries for /events use start and end timestamps, with up to 370 days per request and up to 500 returned occurrences. PATCH/DELETE act on the whole recurring series. For skip/restore, POST /api/v1/events/{id}/exclusions with JSON {"occurrence_start_at":"2026-03-08T14:00:00Z","version":1}, or DELETE with both query parameters, respectively. These operations require an exact generated occurrence, a current series version and write permission; they update the parent version when changed. GET /exclusions returns skipped start instants for editors. Changing series start/end or recurrence rules clears existing exclusions. Full per-instance event overrides remain unsupported.
+Event updates require current integer version; stale versions return HTTP 409. Deleting an event also requires `?version=N`, verified as part of a conditional permission-checked DELETE. Missing version yields HTTP 428. Recurrence fields: freq (DAILY, WEEKLY, MONTHLY, YEARLY), interval (1–24), count (2–366), tzid (optional IANA timezone or null). Example recurrence: {"freq":"WEEKLY","interval":1,"count":8,"tzid":"America/Chicago"}. Queries for /events use start and end timestamps, with up to 370 days per request and up to 500 returned occurrences. PATCH/DELETE act on the whole recurring series. For skip/restore, POST /api/v1/events/{id}/exclusions with JSON {"occurrence_start_at":"2026-03-08T14:00:00Z","version":1}, or DELETE with both query parameters, respectively. These operations require an exact generated occurrence, a current series version and write permission; they update the parent version when changed. GET /exclusions returns skipped start instants for editors. Changing series start/end or recurrence rules clears existing exclusions. Full per-instance event overrides remain unsupported.
 
 ## ICS portability
 
@@ -61,7 +61,7 @@ GET /api/v1/availability requires calendar_id and timezone-aware start/end strin
 
 ## Task priorities
 
-Task creation supports optional integer `priority` with values 1 (urgent), 2 (high), 3 (normal default), and 4 (low). Task updates may change `priority`. Boolean and out-of-range values return HTTP 400. Existing database tasks are upgraded in place with the default priority 3; the migration preserves their IDs, ownership and due dates. Task filters for open, due today, overdue and completed are currently browser-side views of accessible tasks, not additional server query parameters.
+Task creation supports optional integer `priority` with values 1 (urgent), 2 (high), 3 (normal default), and 4 (low). Task updates may change `priority`. PATCH `/api/v1/tasks/{id}` requires an integer `version` in its JSON body; DELETE `/api/v1/tasks/{id}?version=N` requires the current version in the query. Every successful update increments the version and returns the new one. Both stale writes and stale deletions return HTTP 409; missing or invalid versions return HTTP 428. Boolean and out-of-range values return HTTP 400. Existing database tasks are upgraded in place with the default priority 3; the migration preserves their IDs, ownership and due dates. Task filters for open, due today, overdue and completed are currently browser-side views of accessible tasks, not additional server query parameters.
 
 ## Browser availability explorer
 
@@ -82,3 +82,7 @@ GET `/api/v1/export.json` returns `goreecloud-calendar-data` schema version 1 wi
 ## Local account security controls
 
 GET `/api/v1/sessions` reports only the number of unexpired sessions belonging to the bearer-token user. POST `/api/v1/sessions/revoke-others` deletes that user's sessions other than the invoking token. POST `/api/v1/account/change-password` requires JSON `current_password` and `new_password` (12–128 characters and different from the current password), verifies the existing password and revokes **all** sessions after changing the scrypt credential hash. The caller must sign in anew. An in-flight old-password login cannot create a new session after rotation: its credential record is rechecked under a SQLite write transaction. These are development features and do not replace production MFA, account recovery, or multi-node token revocation.
+
+## Bounded create-request retry safety
+
+POST `/api/v1/events` and POST `/api/v1/tasks` accept an optional `client_request_id` field of 16–80 ASCII characters from `A–Z`, `a–z`, `0–9`, `_` or `-`. A new ID is generated by the browser for each creation form and reused if that same form's network submission is retried. Request IDs are scoped to the authenticated user and resource kind. The server hashes a canonical JSON representation of the request (excluding the ID), takes a SQLite write lock, and stores the receipt in the same transaction as the new item. First creation returns 201 with `id`, `version` and `replayed:false`; an identical retry within seven days returns 200 with the original `id`, current `version` and `replayed:true`. Reusing an ID with different content or after the original resource has been deleted returns 409. Receipts older than seven days are pruned when keyed creates occur. Requests without IDs retain the original non-idempotent behavior. **This is retry protection within one SQLite instance, not full offline sync, distributed idempotency, an indefinite guarantee or a CalDAV sync-token protocol.**

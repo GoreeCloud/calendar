@@ -42,3 +42,7 @@ The owner-only `/api/v1/export.json` endpoint deliberately excludes password has
 ## Password-rotation concurrency
 
 A password change verifies the current secret, stores a new independently salted scrypt hash and revokes all account sessions. Logins recheck the credential record under a short SQLite writer transaction after performing their password derivation, so an old-password login whose derivation overlaps a password change cannot issue a post-rotation session. This is development-local transactional safety, not multi-node production revocation or MFA.
+
+## Concurrent edit and retry safety
+
+Task and event mutations now require current versions for edits and deletions, with conditional SQLite writes and rechecked edit-role authorization. Stale updates return HTTP 409 rather than silently overwriting newer records. Read/edit roles are still application-level permissions, not distributed capability tokens. Optional `client_request_id` receipts for POST event/task creation are user- and type-scoped, save only a SHA-256 hash of the request body and a resource ID, and expire after seven days. They prevent identical concurrent retries within one SQLite store but do not provide cross-node coordination, offline queues, or CalDAV sync tokens. Once a receipt expires, a retry can create a new resource. Treat request keys as non-secret tracking identifiers; never include passwords or bearer tokens in them. SQLite connections close on request completion, and transactional writes roll back on error.

@@ -60,3 +60,7 @@ Basic calendar metadata editing, private availability exploration, P1–P4 task 
 ## Existing preview improvements and DAV coordination
 
 Private scheduling candidates across up to five local calendars, owner-only JSON data export, password/session controls and basic native task parity are implemented in the Calendar development branch; they are **not** release acceptance. The dedicated GoreeCloud DAV project already maintains an independent experimental CalDAV/CardDAV/WebDAV backend. Calendar must integrate with that governed backend rather than inventing a second protocol server or a shared-database shortcut. See [DAV interoperability contract](DAV-INTEROPERABILITY.md) for identity, storage, ETag, synchronization and privacy gates. Appointment booking and real two-way CalDAV synchronization remain unimplemented.
+
+## Network retries and synchronization (November 2026)
+
+Calendar now has optional seven-day idempotent creates and optimistic version checks on events/tasks as **local foundations** for safe retries and conflict detection. Remaining interoperability work: durable encrypted offline queues; full conflict-merge user experience; canonical DAV ownership, ETag/If-Match, sync-token/pagination and deletion tombstones; identity federation; server-side permission revocation propagation and cross-device acceptance. Do not equate these implemented primitives with two-way or offline sync.
