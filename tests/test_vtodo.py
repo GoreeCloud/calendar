@@ -44,6 +44,31 @@ class VTODOTests(unittest.TestCase):
                 with self.assertRaises(ImportErrorCalendar):
                     parse_tasks(case)
 
+    def test_title_free_importability_report_distinguishes_tasks_preview(self):
+        from calendar_app.vtodo import task_importability_report
+        source=("BEGIN:VCALENDAR\\r\\nVERSION:2.0\\r\\nBEGIN:VTODO\\r\\n"
+                "UID:urn:uuid:aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa\\r\\n"
+                "DTSTAMP:20261111T120000Z\\r\\nSEQUENCE:3\\r\\n"
+                "CLASS:PRIVATE\\r\\nSTATUS:NEEDS-ACTION\\r\\n"
+                "SUMMARY:PRIVATE TASK TITLE MUST NOT LEAK\\r\\n"
+                "DUE;VALUE=DATE:20261112\\r\\nEND:VTODO\\r\\nEND:VCALENDAR\\r\\n")
+        report=task_importability_report(source)
+        self.assertEqual(report,{"importable":False,"reason_codes":[
+            "classification_not_supported","date_only_due_not_supported",
+            "sequence_not_supported"]})
+        self.assertNotIn("PRIVATE TASK TITLE",str(report))
+        self.assertNotIn("aaaaaaaa",str(report))
+        simple=("BEGIN:VCALENDAR\\r\\nVERSION:2.0\\r\\nBEGIN:VTODO\\r\\n"
+                "UID:good@example.invalid\\r\\nSUMMARY:Visible locally only\\r\\n"
+                "END:VTODO\\r\\nEND:VCALENDAR\\r\\n")
+        self.assertEqual(task_importability_report(simple),
+                         {"importable":True,"reason_codes":[]})
+        self.assertEqual(task_importability_report(simple.replace(
+            "END:VTODO","ATTENDEE:mailto:private@example.invalid\\r\\nEND:VTODO")),
+            {"importable":False,"reason_codes":["invalid_or_unsupported_ics"]})
+        self.assertEqual(task_importability_report("bad input"),
+                         {"importable":False,"reason_codes":["invalid_or_unsupported_ics"]})
+
     def test_utf8_folded_lines_roundtrip(self):
         title="Task "+("é"*90)
         serialized=export_tasks([{"id":"utf8","title":title,"priority":3,
