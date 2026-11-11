@@ -58,6 +58,8 @@ class BackupTests(unittest.TestCase):
                            "(id,calendar_id,title,due_at,done,created_at,updated_at,priority) "
                            "VALUES(?,?,?,?,?,?,?,?)",
                            ("t",cid,"Recovered task",None,0,now(),now(),1))
+                db.execute("INSERT INTO imported_task_uids VALUES(?,?,?)",
+                           (cid,"restored-task@example.test","t"))
             backup_database(source,snapshot)
             restore_database(snapshot,restored)
             self.assertTrue(verify_backup(restored))
@@ -66,6 +68,9 @@ class BackupTests(unittest.TestCase):
                                  "Recovered appointment")
                 self.assertEqual(db.execute("SELECT title,priority FROM tasks").fetchone(),
                                  ("Recovered task",1))
+                self.assertEqual(db.execute(
+                    "SELECT external_uid FROM imported_task_uids WHERE task_id='t'").fetchone()[0],
+                    "restored-task@example.test")
                 self.assertEqual(db.execute("PRAGMA foreign_key_check").fetchall(),[])
             old=Path(restored).read_bytes()
             with self.assertRaises(FileExistsError):

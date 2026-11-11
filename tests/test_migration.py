@@ -72,5 +72,36 @@ class LegacyMembershipMigrationTests(unittest.TestCase):
                 self.assertEqual(conn.execute(
                     "SELECT version FROM tasks WHERE id='task'").fetchone()[0],1)
 
+    def test_pre_vtodo_database_creates_uid_ledger_without_data_loss(self):
+        with tempfile.TemporaryDirectory() as folder:
+            path=str(Path(folder)/"old-before-vtodo.sqlite3")
+            legacy=SCHEMA.split("CREATE TABLE IF NOT EXISTS imported_task_uids (",1)[0]
+            self.assertNotIn("imported_task_uids",legacy)
+            with sqlite3.connect(path) as db:
+                db.executescript(legacy)
+                db.execute("INSERT INTO users VALUES(?,?,?,?,?)",
+                    ("owner","owner@example.test","salt","hash","2026-11-10T00:00:00Z"))
+                db.execute("INSERT INTO calendars VALUES(?,?,?,?,?,?)",
+                    ("cal","owner","Personal","#6475de","","2026-11-10T00:00:00Z"))
+                db.execute("INSERT INTO tasks "
+                    "(id,calendar_id,title,due_at,done,created_at,updated_at,priority,version) "
+                    "VALUES(?,?,?,?,?,?,?,?,?)",
+                    ("task","cal","Keep my old task",None,0,
+                     "2026-11-10T00:00:00Z","2026-11-10T00:00:00Z",3,1))
+            init_database(path)
+            with sqlite3.connect(path) as db:
+                self.assertEqual(db.execute(
+                    "SELECT title FROM tasks WHERE id='task'").fetchone()[0],
+                    "Keep my old task")
+                db.execute("INSERT INTO imported_task_uids VALUES(?,?,?)",
+                           ("cal","example-task@example.test","task"))
+                db.commit()
+            init_database(path)
+            with sqlite3.connect(path) as db:
+                self.assertEqual(db.execute("SELECT task_id FROM imported_task_uids "
+                    "WHERE external_uid='example-task@example.test'").fetchone()[0],"task")
+                self.assertEqual(db.execute("PRAGMA foreign_key_check").fetchall(),[])
+                self.assertEqual(db.execute("PRAGMA integrity_check").fetchone()[0],"ok")
+
 if __name__=="__main__":
     unittest.main()
