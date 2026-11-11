@@ -751,6 +751,50 @@ class CalendarAPITests(unittest.TestCase):
         self.assertEqual(self.request("DELETE",route+"?version=2",self.owner)[0],200)
         self.assertEqual(self.request("GET","/api/v1/events"+qs,self.owner)[1]["events"],[])
 
+    def test_idempotent_creates_replay_original_and_reject_mismatches(self):
+        cid=self.calendar(self.owner)
+        task={"calendar_id":cid,"title":"One task","priority":2,
+              "client_request_id":"test-task-unique-request-001"}
+        status,first=self.request("POST","/api/v1/tasks",self.owner,task)
+        self.assertEqual((status,first["replayed"]),(201,False))
+        status,again=self.request("POST","/api/v1/tasks",self.owner,task)
+        self.assertEqual((status,again["id"],again["replayed"]),(200,first["id"],True))
+        self.assertEqual(self.request("POST","/api/v1/tasks",self.owner,
+            dict(task,title="Changed request"))[0],409)
+        self.assertEqual(len(self.request("GET","/api/v1/tasks",self.owner)[1]["tasks"]),1)
+        other={"calendar_id":self.calendar(self.other),"title":"Independent",
+               "client_request_id":task["client_request_id"]}
+        status,another=self.request("POST","/api/v1/tasks",self.other,other)
+        self.assertEqual(status,201)
+        self.assertNotEqual(another["id"],first["id"])
+        event={"calendar_id":cid,"title":"One event",
+               "start_at":"2026-11-10T16:00:00Z","end_at":"2026-11-10T17:00:00Z",
+               "reminder_minutes":15,"client_request_id":"test-event-unique-request-001"}
+        status,created=self.request("POST","/api/v1/events",self.owner,event)
+        self.assertEqual(status,201,created)
+        status,repeat=self.request("POST","/api/v1/events",self.owner,event)
+        self.assertEqual((status,repeat["id"],repeat["replayed"]),(200,created["id"],True))
+        self.assertEqual(self.request("POST","/api/v1/events",self.owner,
+            dict(event,client_request_id="bad"))[0],400)
+        self.assertEqual(self.request("PATCH","/api/v1/events/"+created["id"],self.owner,
+            {"version":1,"title":"Newer title"})[1]["version"],2)
+        self.assertEqual(self.request("POST","/api/v1/events",self.owner,event)[1]["version"],2)
+        self.assertEqual(self.request("DELETE","/api/v1/events/"+created["id"]+"?version=2",self.owner)[0],200)
+        self.assertEqual(self.request("POST","/api/v1/events",self.owner,event)[0],409)
+
+    def test_concurrent_idempotent_create_is_single_insert(self):
+        cid=self.calendar(self.owner)
+        data={"calendar_id":cid,"title":"Only once",
+              "client_request_id":"concurrent-task-request-001"}
+        from concurrent.futures import ThreadPoolExecutor
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            jobs=[pool.submit(self.request,"POST","/api/v1/tasks",self.owner,data)
+                  for _ in range(2)]
+            responses=[job.result() for job in jobs]
+        self.assertEqual(sorted(status for status,_ in responses),[200,201])
+        self.assertEqual(responses[0][1]["id"],responses[1][1]["id"])
+        self.assertEqual(len(self.request("GET","/api/v1/tasks",self.owner)[1]["tasks"]),1)
+
     def test_logout_and_security_headers(self):
         self.assertEqual(self.request("GET","/api/v1/calendars")[0],401)
         self.assertEqual(self.request("POST","/api/v1/register",body={})[0],401)

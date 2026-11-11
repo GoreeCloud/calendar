@@ -81,6 +81,14 @@ CREATE TABLE IF NOT EXISTS tasks (
   version INTEGER NOT NULL DEFAULT 1 CHECK(version >= 1)
 );
 CREATE INDEX IF NOT EXISTS idx_tasks_calendar ON tasks(calendar_id);
+CREATE TABLE IF NOT EXISTS create_requests (
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  kind TEXT NOT NULL CHECK(kind IN ('event','task')),
+  request_id TEXT NOT NULL, payload_hash TEXT NOT NULL, item_id TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  PRIMARY KEY (user_id,kind,request_id)
+);
+CREATE INDEX IF NOT EXISTS idx_create_requests_age ON create_requests(created_at);
 """
 
 class Failure(Exception):
@@ -200,6 +208,42 @@ def _priority(value: object) -> int:
     if type(value) is not int or not 1<=value<=4:
         raise Failure(400,"Task priority must be an integer from 1 to 4")
     return value
+
+def _request_id(body: dict) -> str | None:
+    key=body.pop("client_request_id",None)
+    if key is not None and (type(key) is not str or
+                            re.fullmatch(r"[A-Za-z0-9_-]{16,80}",key) is None):
+        raise Failure(400,"Invalid client request ID")
+    return key
+
+def _existing_request(db, user: str, kind: str, key: str | None,
+                      payload: dict, cid: str):
+    if key is None:
+        return None,None
+    payload_hash=hashlib.sha256(json.dumps(payload,sort_keys=True,
+        ensure_ascii=False,separators=(",",":")).encode("utf-8")).hexdigest()
+    db.execute("BEGIN IMMEDIATE")
+    # Recheck permission under the writer lock, not only before it.
+    own=db.execute("SELECT owner_id FROM calendars WHERE id=?",(cid,)).fetchone()
+    edit=db.execute("SELECT role FROM calendar_members WHERE calendar_id=? "
+                    "AND user_id=?",(cid,user)).fetchone()
+    if own is None or (own["owner_id"]!=user and (edit is None or edit["role"]!="edit")):
+        raise Failure(403,"Calendar write permission was revoked")
+    expires=(dt.datetime.now(UTC)-dt.timedelta(days=7)).isoformat(
+        timespec="seconds").replace("+00:00","Z")
+    db.execute("DELETE FROM create_requests WHERE created_at<?",(expires,))
+    prior=db.execute("SELECT payload_hash,item_id FROM create_requests "
+        "WHERE user_id=? AND kind=? AND request_id=?",(user,kind,key)).fetchone()
+    if prior is None:
+        return None,payload_hash
+    if not hmac.compare_digest(prior["payload_hash"],payload_hash):
+        raise Failure(409,"Client request ID reused for different content")
+    table="events" if kind=="event" else "tasks"
+    item=db.execute("SELECT version FROM "+table+" WHERE id=? AND calendar_id=?",
+                    (prior["item_id"],cid)).fetchone()
+    if item is None:
+        raise Failure(409,"Original item no longer exists")
+    return {"id":prior["item_id"],"version":item["version"],"replayed":True},payload_hash
 
 def _reminder_minutes(value: object):
     if value is None:
@@ -663,6 +707,8 @@ class CalendarHandler(BaseHTTPRequestHandler):
                     return self._send(200, {"events": events})
                 if method == "POST":
                     payload = self._body()
+                    request_id=_request_id(payload)
+                    raw_create=dict(payload)
                     reminder=_reminder_minutes(payload.pop("reminder_minutes",None))
                     from .recurrence import validate_rule, RecurrenceError
                     try:
@@ -672,6 +718,10 @@ class CalendarHandler(BaseHTTPRequestHandler):
                     cid = _text(payload.get("calendar_id"), "calendar_id", 64, True)
                     self._accessible_calendar(db, user, cid, write=True)
                     title, desc, location, start, end, all_day = _event_values(payload)
+                    previous,digest=_existing_request(db,user,"event",request_id,raw_create,cid)
+                    if previous is not None:
+                        db.commit()
+                        return self._send(200,previous)
                     eid = uuid.uuid4().hex
                     db.execute("INSERT INTO events VALUES(?,?,?,?,?,?,?,?,?,?,?)",
                                (eid, cid, title, desc, location, start, end, all_day, 1, now(), now()))
@@ -679,8 +729,14 @@ class CalendarHandler(BaseHTTPRequestHandler):
                         db.execute("INSERT INTO event_recurrence VALUES(?,?)", (eid, json.dumps(rule)))
                     if reminder is not None:
                         db.execute("INSERT INTO event_reminders VALUES(?,?)", (eid,reminder))
+                    if request_id is not None:
+                        db.execute("INSERT INTO create_requests VALUES(?,?,?,?,?,?)",
+                                   (user,"event",request_id,digest,eid,now()))
                     db.commit()
-                    return self._send(201, {"id": eid, "version": 1})
+                    created={"id":eid,"version":1}
+                    if request_id is not None:
+                        created["replayed"]=False
+                    return self._send(201,created)
             if path.startswith("/api/v1/events/") and path.endswith("/exclusions"):
                 eid=path.split("/")[-2]
                 old=self._owned_item(db,"events",user,eid)
@@ -810,6 +866,8 @@ class CalendarHandler(BaseHTTPRequestHandler):
                     return self._send(200, {"tasks": [dict(r) for r in rows]})
                 if method == "POST":
                     body = self._body()
+                    request_id=_request_id(body)
+                    raw_create=dict(body)
                     if not set(body) <= {"calendar_id", "title", "due_at", "priority"}:
                         raise Failure(400, "Unknown task fields")
                     cid = _text(body.get("calendar_id"), "calendar_id", 64, True)
@@ -817,13 +875,23 @@ class CalendarHandler(BaseHTTPRequestHandler):
                     title = _text(body.get("title"), "title", 160, True)
                     due = _stamp(body["due_at"]) if body.get("due_at") else None
                     priority = _priority(body.get("priority",3))
+                    previous,digest=_existing_request(db,user,"task",request_id,raw_create,cid)
+                    if previous is not None:
+                        db.commit()
+                        return self._send(200,previous)
                     tid = uuid.uuid4().hex
                     db.execute("INSERT INTO tasks "
                                "(id,calendar_id,title,due_at,done,created_at,updated_at,priority) "
                                "VALUES(?,?,?,?,?,?,?,?)",
                                (tid,cid,title,due,0,now(),now(),priority))
+                    if request_id is not None:
+                        db.execute("INSERT INTO create_requests VALUES(?,?,?,?,?,?)",
+                                   (user,"task",request_id,digest,tid,now()))
                     db.commit()
-                    return self._send(201, {"id":tid,"version":1})
+                    created={"id":tid,"version":1}
+                    if request_id is not None:
+                        created["replayed"]=False
+                    return self._send(201,created)
             if path.startswith("/api/v1/tasks/") and method in ("PATCH", "DELETE"):
                 tid = path.rsplit("/", 1)[-1]
                 old = self._owned_item(db, "tasks", user, tid)
