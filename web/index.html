@@ -1,0 +1,198 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#131d37">
+  <title>GoreeCloud Calendar</title>
+  <link rel="stylesheet" href="/styles.css">
+  <script src="/app.js" defer></script>
+</head>
+<body>
+  <main id="auth-screen" class="auth-page">
+    <div class="auth-art" aria-hidden="true"><div class="orb orb-a"></div><div class="orb orb-b"></div><div class="orbit">◷</div></div>
+    <section class="auth-card surface" aria-labelledby="auth-title">
+      <span class="eyebrow">YOUR TIME. YOUR CLOUD.</span>
+      <div class="brand brand-auth"><span class="brand-mark">◷</span> GoreeCloud <strong>Calendar</strong></div>
+      <h1 id="auth-title">Make room for what matters.</h1>
+      <p class="muted">A personal calendar that lives on your server. Sign in to your private workspace.</p>
+      <form id="login-form">
+        <label for="login-email">Email address</label>
+        <input id="login-email" type="email" name="email" autocomplete="username" required autofocus placeholder="you@example.com">
+        <label for="login-password">Password</label>
+        <input id="login-password" type="password" name="password" autocomplete="current-password" required>
+        <p id="login-error" class="error" role="alert"></p>
+        <button class="primary full" type="submit">Sign in <span aria-hidden="true">↗</span></button>
+      </form>
+      <p class="auth-note">Your administrator creates accounts locally on the self-hosted server.</p>
+    </section>
+  </main>
+
+  <div id="app-shell" class="app-shell" hidden>
+    <aside class="sidebar" aria-label="Calendar sidebar">
+      <div class="brand"><span class="brand-mark">◷</span><span>GoreeCloud<br><strong>Calendar</strong></span></div>
+      <button class="primary create-btn" id="new-event">＋ &nbsp; New event</button>
+      <div class="sidebar-label">WORKSPACE</div>
+      <nav id="desktop-nav" aria-label="Main navigation">
+        <button class="nav-item active" data-view="month"><span aria-hidden="true">▦</span> Month</button>
+        <button class="nav-item" data-view="week"><span aria-hidden="true">▤</span> Week</button>
+        <button class="nav-item" data-view="agenda"><span aria-hidden="true">☷</span> Agenda</button>
+        <button class="nav-item" data-view="tasks"><span aria-hidden="true">✓</span> Tasks</button>
+      </nav>
+      <div class="calendar-heading"><span class="sidebar-label">MY CALENDARS</span><button class="icon-btn small" id="new-calendar" title="Create calendar" aria-label="Create calendar">＋</button></div>
+      <div id="calendar-list" class="calendar-list" aria-label="Visible calendars"></div>
+      <div class="sidebar-bottom">
+        <div class="privacy-note"><span aria-hidden="true">◈</span> Private by design <small>Your calendars stay on your server.</small></div>
+        <div class="account"><span class="avatar" id="avatar">G</span><div><span id="account-email"></span><small>Self-hosted workspace</small></div><button id="account-security" class="icon-btn" type="button" title="Account security" aria-label="Account security">♢</button><button id="sign-out" class="icon-btn" title="Sign out" aria-label="Sign out">↪</button></div>
+      </div>
+    </aside>
+
+    <div class="workspace">
+      <header class="topbar">
+        <div class="headline"><p class="eyebrow">YOUR SCHEDULE</p><h1 id="period-title">Calendar</h1></div>
+        <div class="top-actions"><button id="mobile-calendars" class="icon-btn mobile-only" title="Calendar settings" aria-label="Manage calendars">▣</button><button id="mobile-new-calendar" class="icon-btn mobile-only" title="New calendar" aria-label="New calendar">＋</button><button id="mobile-security" class="icon-btn mobile-only" type="button" title="Account security" aria-label="Account security">♢</button><button id="mobile-signout" class="icon-btn mobile-only" title="Sign out" aria-label="Sign out">↪</button><span id="sync-state" class="sync-status" role="status">● Connected</span><button id="today-btn" class="secondary">Today</button><div class="stepper"><button id="prev-btn" aria-label="Previous period">‹</button><button id="next-btn" aria-label="Next period">›</button></div></div>
+      </header>
+      <div class="toolbar"><div class="toolbar-caption" id="toolbar-caption">Your time, organized.</div><div class="toolbar-actions"><button id="enable-alerts" class="icon-btn" type="button" title="Enable browser reminders while Calendar is open" aria-label="Enable browser reminders">♢</button><button id="availability-btn" class="secondary" type="button">◷ Availability</button><button id="search-btn" class="secondary search-action">⌕ Search</button><button id="import-btn" class="secondary">↑ Import .ics</button><input type="file" id="import-file" accept=".ics,text/calendar" hidden><input type="file" id="import-task-file" accept=".ics,text/calendar" hidden aria-label="Choose iCalendar VTODO task file"><button id="export-btn" class="secondary">↓ Export calendar</button><button id="export-my-data" class="secondary" type="button" title="Export calendars and tasks you own as a private JSON file">↓ My data</button><button class="primary small-primary" id="toolbar-create">＋ Event</button></div></div>
+      <main id="main-view" tabindex="-1" aria-live="polite"><div class="skeleton" aria-hidden="true"></div></main>
+    </div>
+    <nav id="mobile-nav" class="mobile-dock" aria-label="Mobile navigation">
+      <button data-view="month" class="active">▦<span>Month</span></button>
+      <button data-view="week">▤<span>Week</span></button>
+      <button data-view="agenda">☷<span>Agenda</span></button>
+      <button data-view="tasks">✓<span>Tasks</span></button>
+      <button id="mobile-create">＋<span>New</span></button>
+    </nav>
+  </div>
+  <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+
+  <dialog id="security-dialog" class="editor-dialog">
+    <div class="dialog-heading"><div><span class="eyebrow">ACCOUNT SECURITY</span><h2>Sessions and password</h2></div><button type="button" class="icon-btn" data-close="security-dialog" aria-label="Close">✕</button></div>
+    <p id="security-session-count" class="muted" aria-live="polite">Checking active sessions…</p>
+    <button id="revoke-other-sessions" type="button" class="secondary">Sign out other sessions</button>
+    <form id="change-password-form">
+      <label for="current-password">Current password</label>
+      <input id="current-password" type="password" autocomplete="current-password" required>
+      <label for="new-password">New password (12–128 characters)</label>
+      <input id="new-password" type="password" minlength="12" maxlength="128" autocomplete="new-password" required>
+      <label for="confirm-password">Confirm new password</label>
+      <input id="confirm-password" type="password" minlength="12" maxlength="128" autocomplete="new-password" required>
+      <p class="muted">Changing your password signs out every session, including this one.</p>
+      <div class="dialog-actions"><button type="button" class="secondary" data-close="security-dialog">Cancel</button><button class="primary" type="submit" id="change-password-submit">Change password</button></div>
+    </form>
+  </dialog>
+  <dialog id="event-dialog" class="editor-dialog">
+    <form id="event-form">
+      <div class="dialog-heading"><div><span class="eyebrow">SCHEDULE</span><h2 id="event-dialog-title">New event</h2></div><button type="button" class="icon-btn" data-close="event-dialog" aria-label="Close">✕</button></div>
+      <label for="event-title">Event name</label><input id="event-title" maxlength="160" required placeholder="What's on your calendar?">
+      <label class="all-day-option" for="event-all-day"><input type="checkbox" id="event-all-day"> All-day event</label>
+      <div class="two-fields"><div><label for="event-start">Starts</label><input id="event-start" type="datetime-local" required></div><div><label for="event-end">Ends</label><input id="event-end" type="datetime-local" required></div></div>
+      <label for="event-repeat">Repeat</label>
+      <select id="event-repeat"><option value="NONE">Does not repeat</option><option value="DAILY">Daily</option><option value="WEEKLY">Weekly</option><option value="MONTHLY">Monthly</option><option value="YEARLY">Yearly</option></select>
+      <div id="repeat-fields" class="two-fields" hidden>
+        <div><label for="repeat-interval">Repeat every</label><input id="repeat-interval" type="number" min="1" max="24" value="1"></div>
+        <div><label for="repeat-count">Occurrences</label><input id="repeat-count" type="number" min="2" max="366" value="12"></div>
+      </div>
+      <label for="event-calendar">Calendar</label><select id="event-calendar" required></select>
+      <label for="event-reminder">Reminder</label>
+      <select id="event-reminder">
+        <option value="">No reminder</option>
+        <option value="0">At event start</option>
+        <option value="5">5 minutes before</option>
+        <option value="10">10 minutes before</option>
+        <option value="15">15 minutes before</option>
+        <option value="30">30 minutes before</option>
+        <option value="60">1 hour before</option>
+        <option value="1440">1 day before</option>
+      </select>
+      <label for="event-location">Location</label><input id="event-location" maxlength="500" placeholder="Add a location">
+      <label for="event-description">Details</label><textarea id="event-description" maxlength="4000" rows="3" placeholder="Add a note"></textarea>
+      <div class="dialog-actions"><button type="button" id="event-delete" class="danger" hidden>Delete event</button><button type="button" id="event-skip" class="secondary" hidden>Skip this date</button><button type="button" id="event-skipped" class="secondary" hidden>Manage skipped dates</button><span class="flex-spacer"></span><button type="button" class="secondary" data-close="event-dialog">Cancel</button><button class="primary" id="event-save" type="submit">Save event</button></div>
+    </form>
+  </dialog>
+  <dialog id="calendars-dialog" class="editor-dialog">
+    <div class="dialog-heading"><div><span class="eyebrow">WORKSPACE</span><h2>Calendars</h2></div><button type="button" class="icon-btn" data-close="calendars-dialog" aria-label="Close">✕</button></div>
+    <p class="muted">Show or hide calendars, and manage access to calendars you own.</p>
+    <div id="mobile-calendar-list" class="calendar-list"></div>
+    <div class="dialog-actions"><button type="button" class="secondary" data-close="calendars-dialog">Done</button></div>
+  </dialog>
+  <dialog id="availability-dialog" class="editor-dialog">
+    <div class="dialog-heading"><div><span class="eyebrow">YOUR SCHEDULE</span><h2>Availability</h2></div><button type="button" class="icon-btn" data-close="availability-dialog" aria-label="Close">✕</button></div>
+    <p class="muted">See occupied intervals on a calendar you can access. This is not a public booking link or a guarantee that unscheduled time is available.</p>
+    <form id="availability-form">
+      <label for="availability-calendar">Calendar</label>
+      <select id="availability-calendar" required></select>
+      <label for="availability-date">Date</label>
+      <input type="date" id="availability-date" required>
+      <label for="availability-duration">Meeting length</label>
+      <select id="availability-duration"><option value="30">30 minutes</option><option value="60">1 hour</option><option value="90">90 minutes</option><option value="120">2 hours</option></select>
+      <div class="dialog-actions"><button class="secondary" id="suggest-times" type="button">Suggest meeting times</button><button class="primary" type="submit">View time blocks</button></div>
+    </form>
+    <div id="availability-results" class="availability-results" aria-live="polite" aria-atomic="true"></div>
+  </dialog>
+  <dialog id="search-dialog" class="editor-dialog">
+    <div class="dialog-heading"><div><span class="eyebrow">FIND SOMETHING</span><h2>Search calendar</h2></div><button type="button" class="icon-btn" data-close="search-dialog" aria-label="Close">✕</button></div>
+    <form id="search-form">
+      <label for="search-query">Search events, notes, locations, and tasks</label>
+      <input id="search-query" type="search" minlength="2" maxlength="100" required placeholder="Project meeting, appointment, deadline…">
+      <div class="dialog-actions"><button class="primary" type="submit">Search</button></div>
+    </form>
+    <div id="search-results" class="search-results" aria-live="polite"></div>
+  </dialog>
+  <dialog id="share-dialog" class="editor-dialog">
+    <form id="share-form">
+      <div class="dialog-heading"><div><span class="eyebrow">COLLABORATE</span><h2>Share calendar</h2></div><button type="button" class="icon-btn" data-close="share-dialog" aria-label="Close">✕</button></div>
+      <p id="share-calendar-name" class="muted"></p>
+      <label for="share-email">Member account email</label>
+      <input id="share-email" type="email" required maxlength="320" placeholder="member@example.com">
+      <label for="share-role">Permission</label>
+      <select id="share-role"><option value="freebusy">Availability only — no event details</option><option value="read">Read event details</option><option value="edit">Edit events and tasks</option></select>
+      <button class="primary" type="submit">Grant access</button>
+      <div class="share-members-heading">Current members</div>
+      <div id="share-members" class="share-members" aria-live="polite"></div>
+      <div class="dialog-actions"><button type="button" class="secondary" data-close="share-dialog">Close</button></div>
+    </form>
+  </dialog>
+  <dialog id="skipped-dialog" class="editor-dialog">
+    <div class="dialog-heading"><div><span class="eyebrow">RECURRING SERIES</span><h2>Skipped dates</h2></div><button type="button" class="icon-btn" data-close="skipped-dialog" aria-label="Close">✕</button></div>
+    <div id="skipped-list" class="share-members" aria-live="polite"></div>
+    <div class="dialog-actions"><button type="button" class="secondary" data-close="skipped-dialog">Done</button></div>
+  </dialog>
+  <dialog id="calendar-settings-dialog" class="editor-dialog">
+    <form id="calendar-settings-form">
+      <div class="dialog-heading"><div><span class="eyebrow">CALENDAR SETTINGS</span><h2>Edit calendar</h2></div><button type="button" class="icon-btn" data-close="calendar-settings-dialog" aria-label="Close">✕</button></div>
+      <label for="settings-calendar-name">Calendar name</label>
+      <input id="settings-calendar-name" maxlength="100" required>
+      <label for="settings-calendar-description">Description</label>
+      <textarea id="settings-calendar-description" maxlength="500" rows="3"></textarea>
+      <label for="settings-calendar-color">Calendar color</label>
+      <input id="settings-calendar-color" type="color">
+      <p class="muted">Deleting a calendar permanently deletes its events, tasks and sharing permissions.</p>
+      <div class="dialog-actions"><button type="button" class="danger" id="settings-calendar-delete">Delete calendar</button><span class="flex-spacer"></span><button type="button" class="secondary" data-close="calendar-settings-dialog">Cancel</button><button id="settings-calendar-save" class="primary" type="submit">Save changes</button></div>
+    </form>
+  </dialog>
+  <dialog id="calendar-dialog" class="editor-dialog">
+    <form id="calendar-form">
+      <div class="dialog-heading"><div><span class="eyebrow">WORKSPACE</span><h2>Create calendar</h2></div><button type="button" class="icon-btn" data-close="calendar-dialog" aria-label="Close">✕</button></div>
+      <label for="calendar-name">Calendar name</label><input id="calendar-name" maxlength="100" required placeholder="Family, projects, travel…">
+      <label for="calendar-color">Calendar color</label><input id="calendar-color" type="color" value="#6475de">
+      <div class="dialog-actions"><button class="secondary" type="button" data-close="calendar-dialog">Cancel</button><button class="primary" type="submit">Create calendar</button></div>
+    </form>
+  </dialog>
+  <dialog id="task-dialog" class="editor-dialog">
+    <form id="task-form">
+      <div class="dialog-heading"><div><span class="eyebrow">TO-DO</span><h2 id="task-dialog-title">New task</h2></div><button type="button" class="icon-btn" data-close="task-dialog" aria-label="Close">✕</button></div>
+      <label for="task-title">Task</label><input id="task-title" maxlength="160" required placeholder="What needs doing?">
+      <label for="task-calendar">Calendar</label><select id="task-calendar" required></select>
+      <label for="task-due">Due date (optional)</label><input id="task-due" type="datetime-local">
+      <label for="task-priority">Priority</label>
+      <select id="task-priority">
+        <option value="1">P1 · Urgent</option>
+        <option value="2">P2 · High</option>
+        <option value="3" selected>P3 · Normal</option>
+        <option value="4">P4 · Low</option>
+      </select>
+      <div class="dialog-actions"><button class="secondary" type="button" data-close="task-dialog">Cancel</button><button class="primary" id="task-save" type="submit">Add task</button></div>
+    </form>
+  </dialog>
+</body>
+</html>

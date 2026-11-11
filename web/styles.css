@@ -1,0 +1,224 @@
+/* GoreeCloud UI: Canvas / Surface / Lens; semantic tokens are local fallbacks
+   for the GC UI design language until a stable distributable component is adopted. */
+:root {
+  color-scheme:light;
+  --gc-canvas:#f5f7fc; --gc-surface:#fff; --gc-surface-tonal:#f0f3fa;
+  --gc-brand:#4d5cc8; --gc-on-brand:#fff; --gc-text:#182340; --gc-text-soft:#64718b;
+  --gc-outline:#e1e6f0; --gc-positive:#17816b; --gc-negative:#b7304c;
+  --gc-lens-fill:rgba(255,255,255,.89); --gc-shadow:0 24px 70px rgba(29,40,84,.10);
+  font-family:Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;
+  font-synthesis:none;
+}
+@media (prefers-color-scheme:dark){:root {
+  color-scheme:dark;
+  --gc-canvas:#101624; --gc-surface:#192236; --gc-surface-tonal:#222e47;
+  --gc-brand:#adb7ff; --gc-on-brand:#15203c; --gc-text:#eef1fa; --gc-text-soft:#acbad1;
+  --gc-outline:#33415d; --gc-positive:#74d9be; --gc-negative:#ff94ad;
+  --gc-lens-fill:rgba(29,39,61,.90); --gc-shadow:0 24px 70px rgba(0,0,0,.24);
+}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--gc-canvas);color:var(--gc-text);font-size:15px;line-height:1.5}
+button,input,select,textarea{font:inherit}
+button{cursor:pointer}
+button:disabled{opacity:.5;cursor:not-allowed}
+button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible{outline:3px solid var(--gc-brand);outline-offset:3px}
+[hidden]{display:none!important}
+h1,h2,h3,p{margin-top:0}
+h1{letter-spacing:-.045em;line-height:1.14}
+h2{letter-spacing:-.03em}
+.muted{color:var(--gc-text-soft)}
+.eyebrow{font-size:11px;letter-spacing:.16em;font-weight:800;color:var(--gc-brand)}
+.brand{display:flex;align-items:center;gap:11px;font-weight:650;font-size:17px;line-height:1.2;letter-spacing:-.025em}
+.brand strong{font-weight:800}
+.brand-mark{display:grid;place-items:center;border-radius:16px;width:43px;height:43px;font-size:31px;color:var(--gc-on-brand);background:linear-gradient(135deg,#5367e0,#7262b7);box-shadow:0 8px 16px rgba(66,85,196,.18)}
+.primary,.secondary,.danger,.icon-btn{border:1px solid transparent;display:inline-flex;align-items:center;justify-content:center;gap:8px;border-radius:12px;min-height:42px;padding:9px 16px;font-weight:700;transition:transform .12s,background .22s,border-color .22s}
+.primary{background:var(--gc-brand);color:var(--gc-on-brand)}
+.primary:hover{filter:brightness(.96);transform:translateY(-1px)}
+.secondary{background:var(--gc-surface);color:var(--gc-text);border-color:var(--gc-outline)}
+.secondary:hover{background:var(--gc-surface-tonal)}
+.danger{color:var(--gc-negative);background:transparent;border-color:var(--gc-outline)}
+.icon-btn{padding:0;min-width:42px;color:var(--gc-text-soft);background:transparent;font-size:20px}
+.icon-btn:hover{background:var(--gc-surface-tonal);color:var(--gc-text)}
+.icon-btn.small{min-width:32px;min-height:32px}
+.full{width:100%;justify-content:space-between;padding:13px 16px}
+.auth-page{min-height:100vh;display:grid;place-items:center;padding:30px;overflow:hidden;position:relative}
+.auth-art{position:absolute;inset:0;overflow:hidden;pointer-events:none}
+.orb{position:absolute;border-radius:50%;filter:blur(8px)}
+.orb-a{width:650px;height:650px;top:-320px;left:-170px;background:radial-gradient(circle,#aebfff70,transparent 70%)}
+.orb-b{width:700px;height:700px;bottom:-400px;right:-240px;background:radial-gradient(circle,#b5a6e755,transparent 70%)}
+.orbit{position:absolute;font-size:280px;color:var(--gc-brand);opacity:.035;right:11%;top:15%;transform:rotate(-18deg)}
+.surface,.auth-card{background:var(--gc-surface);border:1px solid var(--gc-outline);box-shadow:var(--gc-shadow)}
+.auth-card{z-index:1;width:min(460px,100%);border-radius:30px;padding:42px}
+.brand-auth{margin:14px 0 28px}
+.auth-card h1{font-size:clamp(28px,4vw,38px);margin-bottom:12px}
+.auth-card .muted{margin-bottom:30px}
+label{display:block;margin:16px 0 7px;font-weight:700;font-size:13px}
+input:not([type=checkbox]),textarea,select{background:var(--gc-surface);color:var(--gc-text);border:1px solid var(--gc-outline);border-radius:12px;width:100%;padding:11px 13px;min-height:45px}
+input[type=color]{padding:4px!important;width:86px!important;height:50px}
+textarea{resize:vertical}
+.auth-note{font-size:12px;color:var(--gc-text-soft);margin:24px 0 0}
+.error{color:var(--gc-negative);min-height:23px;margin:7px 0}
+.app-shell{display:grid;grid-template-columns:260px minmax(0,1fr);min-height:100vh}
+.sidebar{background:var(--gc-surface);border-right:1px solid var(--gc-outline);padding:32px 18px 18px;display:flex;flex-direction:column;gap:24px}
+.sidebar .brand{padding-left:8px;margin-bottom:7px}
+.create-btn{width:100%;justify-content:flex-start;padding:15px 17px}
+.sidebar-label{font-size:11px;letter-spacing:.14em;font-weight:800;color:var(--gc-text-soft);padding-left:13px}
+nav#desktop-nav{display:flex;flex-direction:column;gap:5px}
+.nav-item{border:0;background:transparent;color:var(--gc-text-soft);padding:11px 15px;min-height:45px;width:100%;text-align:left;border-radius:13px;font-weight:700;display:flex;align-items:center;gap:13px}
+.nav-item span{font-size:20px;font-weight:400}
+.nav-item:hover{background:var(--gc-surface-tonal)}
+.nav-item.active{background:var(--gc-surface-tonal);color:var(--gc-brand)}
+.calendar-heading{display:flex;align-items:center;justify-content:space-between}
+.calendar-list{display:flex;flex-direction:column;gap:5px}
+.calendar-item{display:flex;align-items:center;gap:11px;padding:8px 11px;border-radius:12px;cursor:pointer}
+.calendar-item:hover{background:var(--gc-surface-tonal)}
+.calendar-item input{accent-color:var(--gc-brand);width:17px;height:17px}
+.calendar-dot{height:10px;width:10px;border-radius:4px;flex-shrink:0}
+.sidebar-bottom{margin-top:auto}
+.privacy-note{background:var(--gc-surface-tonal);padding:15px;border-radius:16px;font-weight:800;color:var(--gc-positive)}
+.privacy-note small,.account small{display:block;color:var(--gc-text-soft);font-weight:400;font-size:12px;margin-top:4px}
+.account{display:flex;align-items:center;gap:9px;margin-top:17px;padding:12px 3px;min-width:0;border-top:1px solid var(--gc-outline);font-size:12px}
+.account>div{flex:1;min-width:0;overflow-wrap:anywhere}
+.avatar{display:grid;place-items:center;background:var(--gc-surface-tonal);border-radius:50%;height:37px;width:37px;flex-shrink:0;font-weight:800}
+.workspace{padding:0 min(3vw,38px) 60px;min-width:0}
+.topbar{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:34px 0 26px}
+.headline .eyebrow{margin-bottom:8px}
+.headline h1{font-size:clamp(28px,3vw,36px);margin:0}
+.top-actions,.toolbar-actions{display:flex;align-items:center;gap:11px}
+.sync-status{color:var(--gc-positive);font-size:12px;font-weight:700}
+.stepper{display:flex;border:1px solid var(--gc-outline);background:var(--gc-surface);border-radius:12px;overflow:hidden}
+.stepper button{width:40px;height:41px;border:0;background:transparent;color:var(--gc-text);font-size:24px}
+.stepper button:hover{background:var(--gc-surface-tonal)}
+.stepper button+button{border-left:1px solid var(--gc-outline)}
+.toolbar{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:19px}
+.toolbar-caption{color:var(--gc-text-soft);font-size:13px}
+.small-primary{min-height:41px}
+.calendar-board,.agenda-board,.task-board{border:1px solid var(--gc-outline);border-radius:24px;background:var(--gc-surface);overflow:hidden;box-shadow:0 8px 36px rgba(20,30,60,.025)}
+.month-grid{display:grid;grid-template-columns:repeat(7,minmax(0,1fr))}
+.weekday{padding:17px 8px;text-align:center;font-size:11px;font-weight:800;letter-spacing:.1em;color:var(--gc-text-soft);border-bottom:1px solid var(--gc-outline)}
+.day{background:transparent;border:0;border-right:1px solid var(--gc-outline);border-bottom:1px solid var(--gc-outline);padding:10px 8px 7px;min-height:116px;overflow:hidden;display:flex;flex-direction:column;gap:6px;text-align:left}
+.day:nth-child(7n){border-right:0}
+.day:hover{background:var(--gc-surface-tonal)}
+.day.outside{background:color-mix(in srgb,var(--gc-canvas) 56%,var(--gc-surface))}
+.day-number{align-self:flex-start;display:grid;place-items:center;width:29px;height:29px;font-weight:700;color:var(--gc-text);border-radius:50%;font-size:12px}
+.day.outside .day-number{color:var(--gc-text-soft)}
+.day.today .day-number{background:var(--gc-brand);color:var(--gc-on-brand)}
+.event-pill{display:block;width:100%;border:0;border-left:3px solid;border-radius:6px;padding:5px 6px;text-align:left;font-size:11px;font-weight:750;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;background:var(--gc-surface-tonal);color:var(--gc-text)}
+.event-pill:hover{text-decoration:underline}
+.more-label{color:var(--gc-text-soft);font-size:11px;padding-left:4px}
+.week-board{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:0}
+.week-column{padding:18px 10px;min-height:460px;border-right:1px solid var(--gc-outline)}
+.week-column:last-child{border-right:0}
+.week-date{font-size:12px;font-weight:800;color:var(--gc-text-soft)}
+.week-date strong{display:block;font-size:25px;color:var(--gc-text)}
+.week-events{display:flex;flex-direction:column;gap:8px;margin-top:24px}
+.week-events button{white-space:normal;line-height:1.45}
+.agenda-board,.task-board{padding:20px}
+.agenda-section{padding:12px 0 20px;border-bottom:1px solid var(--gc-outline)}
+.agenda-heading{font-size:14px;color:var(--gc-text-soft);margin-bottom:12px}
+.agenda-row{border:1px solid var(--gc-outline);border-radius:13px;padding:13px 16px;width:100%;background:var(--gc-surface);display:flex;text-align:left;align-items:center;gap:13px;margin-bottom:9px;color:var(--gc-text)}
+.agenda-row:hover{background:var(--gc-surface-tonal)}
+.agenda-row strong{display:block}
+.agenda-row small{color:var(--gc-text-soft)}
+.agenda-mark{width:4px;align-self:stretch;border-radius:3px}
+.empty{padding:68px 30px;text-align:center;color:var(--gc-text-soft)}
+.empty-symbol{display:block;font-size:45px;opacity:.46;margin-bottom:12px}
+.empty h2{color:var(--gc-text)}
+.task-header{display:flex;justify-content:space-between;align-items:center;gap:12px}
+.task-list{padding:0;margin:16px 0;list-style:none}
+.task-row{display:flex;align-items:center;gap:13px;border-bottom:1px solid var(--gc-outline);padding:15px 4px}
+.task-row input{width:20px;height:20px;accent-color:var(--gc-brand)}
+.task-row .task-text{flex:1}
+.task-row .task-text.completed{text-decoration:line-through;color:var(--gc-text-soft)}
+.task-row small{display:block;color:var(--gc-text-soft)}
+.task-row button{border:0;background:transparent;color:var(--gc-negative);font-weight:700}
+.editor-dialog{width:min(530px,calc(100vw - 24px));max-height:min(90vh,800px);overflow-y:auto;border:1px solid var(--gc-outline);border-radius:26px;background:var(--gc-surface);color:var(--gc-text);box-shadow:var(--gc-shadow);padding:28px}
+.editor-dialog::backdrop{background:rgba(8,13,30,.52);backdrop-filter:blur(5px)}
+.dialog-heading{display:flex;justify-content:space-between;align-items:start}
+.dialog-heading .eyebrow{margin-bottom:6px}
+.dialog-heading h2{font-size:25px;margin-bottom:11px}
+.two-fields{display:grid;grid-template-columns:1fr 1fr;gap:15px}
+.dialog-actions{display:flex;justify-content:flex-end;align-items:center;gap:9px;margin-top:28px}
+.flex-spacer{flex:1}
+.toast{position:fixed;bottom:28px;right:28px;background:var(--gc-text);color:var(--gc-surface);padding:15px 19px;border-radius:13px;box-shadow:var(--gc-shadow);z-index:20;max-width:min(420px,90vw)}
+.skeleton{height:480px;border-radius:24px;background:linear-gradient(95deg,var(--gc-surface-tonal) 25%,var(--gc-surface) 50%,var(--gc-surface-tonal) 75%);background-size:200% 100%;animation:shine 1.3s linear infinite}
+@keyframes shine{to{background-position-x:-200%}}
+.mobile-dock{display:none}
+@media(max-width:1020px){.app-shell{grid-template-columns:215px minmax(0,1fr)}.sidebar{padding-inline:11px}.workspace{padding-inline:20px}.week-column{padding-inline:5px}.day{min-height:95px}}
+@media(max-width:760px){
+  .app-shell{display:block}.sidebar{display:none}.workspace{padding:0 14px calc(112px + env(safe-area-inset-bottom))}
+  .topbar{padding:23px 2px 18px}.headline h1{font-size:26px}.headline .eyebrow{font-size:10px}.sync-status{display:none}
+  .top-actions{gap:5px}.top-actions .secondary{padding:8px;font-size:12px}.stepper button{width:34px}
+  .toolbar{margin-bottom:12px}.toolbar-caption{font-size:11px}.toolbar-actions{gap:6px}.toolbar-actions .secondary{display:none}
+  .day{min-height:77px;padding:5px 3px;gap:3px}.day-number{width:25px;height:25px;font-size:11px}.weekday{padding:10px 4px;font-size:10px}
+  .event-pill{font-size:9px;padding:3px 3px;border-left-width:2px}.more-label{font-size:9px}
+  .calendar-board,.agenda-board,.task-board{border-radius:17px}.week-board{display:block}.week-column{min-height:0;border-bottom:1px solid var(--gc-outline);border-right:0;padding:14px}
+  .week-date strong{display:inline;font-size:18px;margin-left:8px}.week-events{margin-top:8px}
+  .mobile-dock{display:flex;position:fixed;bottom:calc(15px + env(safe-area-inset-bottom));left:50%;transform:translateX(-50%);width:min(94vw,520px);padding:8px;gap:4px;align-items:center;justify-content:space-around;z-index:10;background:var(--gc-lens-fill);border:1px solid var(--gc-outline);border-radius:24px;box-shadow:var(--gc-shadow);backdrop-filter:blur(16px)}
+  .mobile-dock button{background:transparent;border:0;border-radius:15px;padding:6px 8px;display:grid;place-items:center;gap:0;color:var(--gc-text-soft);font-size:23px;min-width:54px;min-height:48px}
+  .mobile-dock button span{font-size:10px;font-weight:800}
+  .mobile-dock button.active{background:var(--gc-surface-tonal);color:var(--gc-brand)}
+  .auth-card{padding:28px;border-radius:23px}.two-fields{grid-template-columns:1fr}.editor-dialog{padding:22px}
+}
+@media(prefers-reduced-motion:reduce){*,*::before,*::after{transition:none!important;animation:none!important}}
+@media(forced-colors:active){.event-pill{border:1px solid ButtonText}.day.today .day-number{outline:2px solid Highlight}.mobile-dock{backdrop-filter:none}}
+
+.mobile-only{display:none}
+@media(max-width:760px){.top-actions .mobile-only{display:inline-flex;min-width:34px;min-height:36px;font-size:20px}.top-actions{flex-wrap:nowrap}}
+
+/* All-day checkbox stays legible across theme modes and mobile sizes. */
+.all-day-option{display:flex;align-items:center;gap:10px;margin-top:16px;font-weight:700}
+.all-day-option input{width:18px;height:18px;accent-color:var(--gc-brand)}
+
+#repeat-fields[hidden]{display:none}
+#repeat-fields input{width:100%}
+
+/* Calendar membership and mobile calendar switcher. */
+.calendar-row{display:flex;align-items:center;gap:4px;min-width:0}
+.calendar-row .calendar-item{flex:1;min-width:0;padding:9px 4px}
+.calendar-caption{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.share-action{border:0;border-radius:10px;color:var(--gc-brand);background:transparent;padding:8px;font-size:12px;font-weight:750}
+.share-action:hover{background:var(--gc-surface-tonal)}
+.share-role{font-size:11px;color:var(--gc-text-soft);white-space:nowrap}
+.share-members-heading{font-weight:800;margin-top:26px;margin-bottom:10px}
+.share-members{display:grid;gap:9px}
+.member-row{display:flex;align-items:center;gap:10px;justify-content:space-between;background:var(--gc-surface-tonal);padding:13px;border-radius:14px;overflow-wrap:anywhere}
+.member-row small{display:block;color:var(--gc-text-soft)}
+.member-row .danger{min-height:36px;flex-shrink:0}
+#calendars-dialog .calendar-list{margin-top:20px}
+
+.search-results{margin-top:24px;display:flex;flex-direction:column;gap:9px}
+.search-results h3{margin:13px 0 3px;font-size:16px}
+.search-summary{font-size:13px;color:var(--gc-text-soft)}
+.search-result{display:flex;flex-direction:column;text-align:left;border:1px solid var(--gc-outline);border-radius:12px;background:var(--gc-surface);color:var(--gc-text);padding:11px 14px;gap:3px}
+.search-result:hover{background:var(--gc-surface-tonal)}
+.search-result small{color:var(--gc-text-soft)}
+@media(max-width:760px){.toolbar-actions .search-action{display:inline-flex}}
+
+/* Availability displays only occupied/unscheduled time, never event details. */
+.availability-results{margin-top:20px}
+.availability-summary{font-size:13px;color:var(--gc-text-soft);font-weight:700}
+.availability-intervals{list-style:none;display:flex;flex-direction:column;gap:9px;margin:0;padding:0}
+.availability-interval{border:1px solid var(--gc-outline);border-radius:13px;padding:12px 14px;display:flex;align-items:center;justify-content:space-between;gap:12px;background:var(--gc-surface-tonal)}
+.availability-interval strong{font-size:13px}
+.availability-interval span{font-size:13px;text-align:right;font-variant-numeric:tabular-nums}
+.availability-interval.busy{border-left:4px solid var(--gc-negative)}
+.availability-interval.free{border-left:4px solid var(--gc-positive)}
+@media(max-width:520px){.availability-interval{align-items:flex-start;flex-direction:column}.availability-interval span{text-align:left}}
+
+/* Owner-only calendar settings fit narrow screens without crowding controls. */
+#calendar-settings-dialog .dialog-actions{flex-wrap:wrap}
+#calendar-settings-dialog .danger{margin-right:auto}
+@media(max-width:520px){#calendar-settings-dialog .dialog-actions .flex-spacer{display:none}}
+
+/* Task priorities and calendar-aware views. */
+.task-header .task-filter{width:auto;min-width:125px;max-width:175px;margin-left:auto}
+.task-priority-marker{font-size:11px;font-weight:800;color:var(--gc-text-soft)}
+.task-priority-marker.priority-1{color:var(--gc-negative)}
+.task-priority-marker.priority-2{color:var(--gc-brand)}
+@media(max-width:650px){.task-header{flex-wrap:wrap}.task-header .task-filter{order:2;min-width:100%;max-width:100%}}
+
+/* VTODO import/export actions live in the Tasks view, not the global toolbar. */
+.task-header{flex-wrap:wrap}
+.task-header .task-ics-action{white-space:nowrap}
+@media(max-width:650px){.task-header .task-ics-action{flex:1;justify-content:center}}

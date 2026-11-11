@@ -1,0 +1,95 @@
+"""Atomic, no-overwrite and validated SQLite snapshot for personal data recovery.
+
+Backup exports plaintext. The caller must protect and encrypt destination storage
+as needed; integrity_check verifies SQLite structure, not recoverability of every
+future application feature or an external restore workflow.
+"""
+import os
+import sqlite3
+import tempfile
+from contextlib import closing
+from pathlib import Path
+
+
+def backup_database(source: str, destination: str) -> None:
+    src = Path(source).expanduser()
+    dest = Path(destination).expanduser()
+    if src.is_symlink() or not src.is_file():
+        raise ValueError("Source database must exist as a regular file")
+    if not dest.parent.is_dir():
+        raise ValueError("Destination parent directory does not exist")
+    if dest.is_symlink() or dest.exists() or src.resolve() == dest.resolve():
+        raise FileExistsError("Refusing to overwrite destination")
+    handle, temporary = tempfile.mkstemp(prefix=".goreecloud-calendar-snapshot-", suffix=".tmp", dir=dest.parent)
+    try:
+        os.fchmod(handle, 0o600)
+        os.close(handle)
+        handle = -1
+        with closing(sqlite3.connect(str(src), timeout=30)) as original, \
+             closing(sqlite3.connect(temporary, timeout=30)) as snapshot:
+            with original, snapshot:
+                original.backup(snapshot)
+                check = snapshot.execute("PRAGMA integrity_check").fetchone()
+                if check is None or check[0] != "ok":
+                    raise ValueError("Backup integrity check failed")
+                if snapshot.execute("PRAGMA foreign_key_check").fetchone() is not None:
+                    raise ValueError("Backup contains invalid foreign-key references")
+        verify = os.open(temporary, os.O_RDONLY)
+        try:
+            os.fsync(verify)
+        finally:
+            os.close(verify)
+        # Hard link publishes atomically without clobbering a concurrently
+        # created destination. Both paths are on the same filesystem.
+        os.link(temporary, dest)
+        directory_fd = os.open(str(dest.parent), os.O_RDONLY)
+        try:
+            os.fsync(directory_fd)
+        finally:
+            os.close(directory_fd)
+    finally:
+        if handle >= 0:
+            os.close(handle)
+        if os.path.exists(temporary):
+            os.unlink(temporary)
+
+
+def verify_backup(path: str) -> bool:
+    """Validate SQLite file structure without modifying or creating a database."""
+    from urllib.parse import quote
+
+    source = Path(path).expanduser()
+    if source.is_symlink() or not source.is_file():
+        raise ValueError("Backup must exist as a regular file")
+    source = source.resolve()
+    uri = "file:" + quote(str(source), safe="/") + "?mode=ro"
+    try:
+        with closing(sqlite3.connect(uri, uri=True, timeout=20)) as connection:
+            check = connection.execute("PRAGMA integrity_check").fetchone()
+            if check is None or check[0] != "ok":
+                raise ValueError("Backup integrity check failed")
+            tables = {row[0] for row in connection.execute(
+                "SELECT name FROM sqlite_master WHERE type='table'")}
+            required = {"users","sessions","calendars","events","tasks"}
+            if not required <= tables:
+                raise ValueError("Backup is not a GoreeCloud Calendar database")
+            broken_foreign_key=connection.execute("PRAGMA foreign_key_check").fetchone()
+            if broken_foreign_key is not None:
+                raise ValueError("Backup contains invalid foreign-key references")
+            return True
+    except sqlite3.DatabaseError:
+        raise ValueError("Backup cannot be read as a valid SQLite database") from None
+
+
+
+def restore_database(snapshot: str, destination: str) -> None:
+    """Validate a snapshot and publish a NEW verified SQLite database.
+
+    Uses SQLite's consistent online backup API, rather than copying raw pages
+    that could omit a source WAL file. No existing target can be replaced.
+    This command does not alter any currently configured server database.
+    """
+    verify_backup(snapshot)
+    backup_database(snapshot,destination)
+    # Confirm the published database, not only the temporary backup copy.
+    verify_backup(destination)

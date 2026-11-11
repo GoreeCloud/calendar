@@ -1,0 +1,20 @@
+services:
+  calendar:
+    build: .
+    restart: unless-stopped
+    ports: ["127.0.0.1:8787:8787"]
+    volumes: [calendar-data:/data]
+    environment:
+      GC_CALENDAR_DB: /data/calendar.sqlite3
+      GC_CALENDAR_HOST: 0.0.0.0
+    read_only: true
+    tmpfs: [/tmp:size=8m,noexec,nosuid]
+    security_opt: [no-new-privileges:true]
+    cap_drop: [ALL]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8787/readyz', timeout=3).read()"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+volumes:
+  calendar-data:
