@@ -959,16 +959,23 @@ class CalendarHandler(BaseHTTPRequestHandler):
                     tasks=parse_tasks(body["ics"])
                 except ImportErrorCalendar as error:
                     raise Failure(400,str(error)) from None
-                dry_run=parse_qs(route.query).get("dry_run",["0"])[0]
+                query_params=parse_qs(route.query,keep_blank_values=True)
+                dry_run=query_params.get("dry_run",["0"])[0]
+                redact=query_params.get("redact_titles",["0"])
                 if dry_run not in ("0","1"):
                     raise Failure(400,"Invalid dry-run parameter")
+                if (len(redact)!=1 or redact[0] not in ("0","1") or
+                        (redact[0]=="1" and dry_run!="1")):
+                    raise Failure(400,"Invalid title-redaction parameter")
                 if dry_run=="1":
                     skipped=sum(db.execute("SELECT 1 FROM imported_task_uids "
                         "WHERE calendar_id=? AND external_uid=?",(cid,task["uid"])).fetchone()
                         is not None for task in tasks)
-                    return self._send(200,{"total":len(tasks),
-                        "would_import":len(tasks)-skipped,"would_skip":skipped,
-                        "sample_titles":[task["title"] for task in tasks[:5]]})
+                    preview={"total":len(tasks),
+                        "would_import":len(tasks)-skipped,"would_skip":skipped}
+                    if redact[0]!="1":
+                        preview["sample_titles"]=[task["title"] for task in tasks[:5]]
+                    return self._send(200,preview)
                 db.execute("BEGIN IMMEDIATE")
                 # Permission may have been revoked after content was parsed.
                 self._accessible_calendar(db,user,cid,write=True)
@@ -1024,16 +1031,23 @@ class CalendarHandler(BaseHTTPRequestHandler):
                     events = parse_calendar(body["ics"])
                 except ImportErrorCalendar as error:
                     raise Failure(400, str(error)) from None
-                dry_run=parse_qs(route.query).get("dry_run",["0"])[0]
+                query_params=parse_qs(route.query,keep_blank_values=True)
+                dry_run=query_params.get("dry_run",["0"])[0]
+                redact=query_params.get("redact_titles",["0"])
                 if dry_run not in ("0","1"):
                     raise Failure(400,"Invalid dry-run parameter")
+                if (len(redact)!=1 or redact[0] not in ("0","1") or
+                        (redact[0]=="1" and dry_run!="1")):
+                    raise Failure(400,"Invalid title-redaction parameter")
                 if dry_run=="1":
                     skipped=sum(db.execute("SELECT 1 FROM imported_uids "
                         "WHERE calendar_id=? AND external_uid=?",(cid,entry["uid"])).fetchone()
                         is not None for entry in events)
-                    return self._send(200,{"total":len(events),
-                        "would_import":len(events)-skipped,"would_skip":skipped,
-                        "sample_titles":[entry["title"] for entry in events[:5]]})
+                    preview={"total":len(events),
+                        "would_import":len(events)-skipped,"would_skip":skipped}
+                    if redact[0]!="1":
+                        preview["sample_titles"]=[entry["title"] for entry in events[:5]]
+                    return self._send(200,preview)
                 db.execute("BEGIN IMMEDIATE")
                 self._accessible_calendar(db,user,cid,write=True)
                 imported, skipped = 0, 0

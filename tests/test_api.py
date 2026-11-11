@@ -905,6 +905,26 @@ class CalendarAPITests(unittest.TestCase):
             self.assertEqual((preview["total"],preview["would_import"],preview["would_skip"]),
                              (1,1,0))
             self.assertEqual(preview["sample_titles"],["Preview "+kind[:-1]])
+            # AI/automation callers can request counts without receiving private titles.
+            redacted_status,redacted=self.request(
+                "POST",route+"?dry_run=1&redact_titles=1",self.owner,data)
+            self.assertEqual(redacted_status,200)
+            self.assertEqual(redacted,{"total":1,"would_import":1,"would_skip":0})
+            self.assertNotIn("Preview",str(redacted))
+            self.assertEqual(self.request(
+                "POST",route+"?dry_run=1&redact_titles=1",self.other,data)[0],404)
+            self.assertEqual(self.request(
+                "POST",route+"?dry_run=1&redact_titles=1",body=data)[0],401)
+            for suffix in ("?dry_run=1&redact_titles=bad",
+                           "?dry_run=1&redact_titles=",
+                           "?dry_run=1&redact_titles=1&redact_titles=0",
+                           "?redact_titles=1",
+                           "?dry_run=0&redact_titles=1"):
+                self.assertEqual(self.request(
+                    "POST",route+suffix,self.owner,data)[0],400,suffix)
+            self.assertEqual(self.request(
+                "POST",route+"?dry_run=1&redact_titles=0",self.owner,data)[1],
+                preview)
             self.assertEqual(self.request("POST",route+"?dry_run=wrong",self.owner,data)[0],400)
             self.assertEqual(self.request("POST",route+"?dry_run=1",self.other,data)[0],404)
             self.assertEqual(self.request("POST",route,self.owner,data)[1]["imported"],1)
