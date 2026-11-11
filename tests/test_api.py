@@ -887,6 +887,36 @@ class CalendarAPITests(unittest.TestCase):
         self.assertEqual(self.request("POST","/api/v1/import.ics",self.owner,
             {"calendar_id":cid,"ics":allowed})[1]["imported"],1)
 
+    def test_import_previews_are_permission_scoped_and_do_not_mutate(self):
+        cid=self.calendar(self.owner)
+        new_task=("BEGIN:VCALENDAR\r\nVERSION:2.0\r\nBEGIN:VTODO\r\n"
+                  "UID:preview-task@example.test\r\nSUMMARY:Preview task\r\n"
+                  "END:VTODO\r\nEND:VCALENDAR\r\n")
+        new_event=("BEGIN:VCALENDAR\r\nVERSION:2.0\r\nBEGIN:VEVENT\r\n"
+                   "UID:preview-event@example.test\r\n"
+                   "DTSTART:20261110T150000Z\r\nDTEND:20261110T160000Z\r\n"
+                   "SUMMARY:Preview event\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n")
+        examples=(("/api/v1/import-tasks.ics",new_task,"tasks"),
+                  ("/api/v1/import.ics",new_event,"events"))
+        for route,ics,kind in examples:
+            data={"calendar_id":cid,"ics":ics}
+            status,preview=self.request("POST",route+"?dry_run=1",self.owner,data)
+            self.assertEqual(status,200,preview)
+            self.assertEqual((preview["total"],preview["would_import"],preview["would_skip"]),
+                             (1,1,0))
+            self.assertEqual(preview["sample_titles"],["Preview "+kind[:-1]])
+            self.assertEqual(self.request("POST",route+"?dry_run=wrong",self.owner,data)[0],400)
+            self.assertEqual(self.request("POST",route+"?dry_run=1",self.other,data)[0],404)
+            self.assertEqual(self.request("POST",route,self.owner,data)[1]["imported"],1)
+            self.assertEqual(self.request("POST",route+"?dry_run=1",self.owner,data)[1]["would_skip"],1)
+        tasks=self.request("GET","/api/v1/tasks",self.owner)[1]["tasks"]
+        self.assertEqual(len(tasks),1)
+        self.assertEqual(tasks[0]["title"],"Preview task")
+        events=self.request("GET","/api/v1/events?start=2026-11-01T00:00:00Z"
+            "&end=2026-12-01T00:00:00Z",self.owner)[1]["events"]
+        self.assertEqual(len(events),1)
+        self.assertEqual(events[0]["title"],"Preview event")
+
     def test_logout_and_security_headers(self):
         self.assertEqual(self.request("GET","/api/v1/calendars")[0],401)
         self.assertEqual(self.request("POST","/api/v1/register",body={})[0],401)
