@@ -511,7 +511,7 @@ $("event-skipped").addEventListener("click",async()=>{
 });
 $("event-delete").addEventListener("click",async()=>{
   if(!state.editing||!confirm("Delete this event?"))return;
-  try{await api("/events/"+state.editing.id,{method:"DELETE"});$("event-dialog").close();await refresh();toast("Event deleted.");}
+  try{await api("/events/"+state.editing.id+"?"+new URLSearchParams({version:String(state.editing.version)}),{method:"DELETE"});$("event-dialog").close();await refresh();toast("Event deleted.");}
   catch(error){toast(error.message);}
 });
 document.querySelectorAll("[data-close]").forEach(b=>b.addEventListener("click",()=>$(b.dataset.close).close()));

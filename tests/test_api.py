@@ -63,7 +63,7 @@ class CalendarAPITests(unittest.TestCase):
         status,result=self.request("PATCH","/api/v1/events/"+eid,self.owner,{"version":1,"title":"Updated"})
         self.assertEqual((status,result["version"]),(200,2))
         self.assertEqual(self.request("PATCH","/api/v1/events/"+eid,self.owner,{"version":1,"title":"Conflict"})[0],409)
-        self.assertEqual(self.request("DELETE","/api/v1/events/"+eid,self.owner)[0],200)
+        self.assertEqual(self.request("DELETE","/api/v1/events/"+eid+"?version=2",self.owner)[0],200)
         self.assertEqual(self.request("GET","/api/v1/events"+window,self.owner)[1]["events"],[])
 
     def test_tasks_and_calendar_isolation(self):
@@ -147,7 +147,7 @@ class CalendarAPITests(unittest.TestCase):
                           {"version":1,"title":"Updated recurring title"})[0],200)
         again=self.request("GET","/api/v1/events"+window,self.owner)[1]["events"]
         self.assertTrue(all(e["title"]=="Updated recurring title" for e in again))
-        self.assertEqual(self.request("DELETE","/api/v1/events/"+eid,self.owner)[0],200)
+        self.assertEqual(self.request("DELETE","/api/v1/events/"+eid+"?version=2",self.owner)[0],200)
         self.assertEqual(self.request("GET","/api/v1/events"+window,self.owner)[1]["events"],[])
 
     def test_recurrence_validates_and_skips_impossible_monthly_days(self):
@@ -733,6 +733,23 @@ class CalendarAPITests(unittest.TestCase):
         row=self.request("GET","/api/v1/tasks",self.owner)[1]["tasks"][0]
         self.assertEqual(row["version"],2)
         self.assertIn(row["title"],("Laptop","Phone"))
+
+    def test_event_deletion_uses_current_version(self):
+        cid=self.calendar(self.owner)
+        status,new=self.request("POST","/api/v1/events",self.owner,{
+            "calendar_id":cid,"title":"Safety review",
+            "start_at":"2026-11-10T14:00:00Z","end_at":"2026-11-10T15:00:00Z"})
+        self.assertEqual(status,201)
+        route="/api/v1/events/"+new["id"]
+        self.assertEqual(self.request("DELETE",route,self.owner)[0],428)
+        self.assertEqual(self.request("PATCH",route,self.owner,
+            {"version":1,"title":"Changed review"})[1]["version"],2)
+        self.assertEqual(self.request("DELETE",route+"?version=1",self.owner)[0],409)
+        qs="?start=2026-11-01T00:00:00Z&end=2026-12-01T00:00:00Z"
+        self.assertEqual(self.request("GET","/api/v1/events"+qs,self.owner)[1]["events"][0]["title"],
+                         "Changed review")
+        self.assertEqual(self.request("DELETE",route+"?version=2",self.owner)[0],200)
+        self.assertEqual(self.request("GET","/api/v1/events"+qs,self.owner)[1]["events"],[])
 
     def test_logout_and_security_headers(self):
         self.assertEqual(self.request("GET","/api/v1/calendars")[0],401)

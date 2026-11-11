@@ -739,7 +739,20 @@ class CalendarHandler(BaseHTTPRequestHandler):
                 eid = path.rsplit("/", 1)[-1]
                 old = self._owned_item(db, "events", user, eid)
                 if method == "DELETE":
-                    db.execute("DELETE FROM events WHERE id=?", (eid,))
+                    query=parse_qs(route.query)
+                    try:
+                        delete_version=int(query.get("version",[""])[0])
+                    except (ValueError,TypeError):
+                        raise Failure(428,"Current event version required") from None
+                    if delete_version<1 or delete_version!=old["version"]:
+                        raise Failure(409,"Event changed on another device; refresh")
+                    deleted=db.execute("DELETE FROM events WHERE id=? AND version=? "
+                        "AND EXISTS(SELECT 1 FROM calendars c WHERE c.id=events.calendar_id "
+                        "AND (c.owner_id=? OR EXISTS(SELECT 1 FROM calendar_members m "
+                        "WHERE m.calendar_id=c.id AND m.user_id=? AND m.role='edit')))",
+                        (eid,delete_version,user,user))
+                    if deleted.rowcount!=1:
+                        raise Failure(409,"Event changed or access revoked; refresh")
                     db.commit()
                     return self._send(200, {"ok": True})
                 payload = self._body()
@@ -765,7 +778,11 @@ class CalendarHandler(BaseHTTPRequestHandler):
                 title, desc, location, start, end, all_day = _event_values(merged)
                 changed = db.execute("UPDATE events SET calendar_id=?,title=?,description=?,"
                     "location=?,start_at=?,end_at=?,all_day=?,version=version+1,updated_at=? "
-                    "WHERE id=? AND version=?", (cid,title,desc,location,start,end,all_day,now(),eid,version))
+                    "WHERE id=? AND version=? "
+                    "AND EXISTS(SELECT 1 FROM calendars c WHERE c.id=events.calendar_id "
+                    "AND (c.owner_id=? OR EXISTS(SELECT 1 FROM calendar_members m "
+                    "WHERE m.calendar_id=c.id AND m.user_id=? AND m.role='edit')))",
+                    (cid,title,desc,location,start,end,all_day,now(),eid,version,user,user))
                 if changed.rowcount != 1:
                     raise Failure(409, "Event changed; refresh")
                 if has_rule or "start_at" in payload or "end_at" in payload:
