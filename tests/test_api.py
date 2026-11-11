@@ -940,13 +940,13 @@ class CalendarAPITests(unittest.TestCase):
     def test_tasks_preflight_is_redacted_permissioned_and_non_mutating(self):
         cid=self.calendar(self.owner)
         body={"calendar_id":cid,"ics":(
-            "BEGIN:VCALENDAR\\r\\nVERSION:2.0\\r\\nBEGIN:VTODO\\r\\n"
-            "UID:urn:uuid:aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa\\r\\n"
-            "DTSTAMP:20261111T120000Z\\r\\nSEQUENCE:3\\r\\n"
-            "CLASS:PRIVATE\\r\\nSTATUS:NEEDS-ACTION\\r\\n"
-            "SUMMARY:SENSITIVE-PRIVATE-TASK-TITLE\\r\\n"
-            "DUE;VALUE=DATE:20261112\\r\\n"
-            "END:VTODO\\r\\nEND:VCALENDAR\\r\\n")}
+            "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nBEGIN:VTODO\r\n"
+            "UID:urn:uuid:aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa\r\n"
+            "DTSTAMP:20261111T120000Z\r\nSEQUENCE:3\r\n"
+            "CLASS:PRIVATE\r\nSTATUS:NEEDS-ACTION\r\n"
+            "SUMMARY:SENSITIVE-PRIVATE-TASK-TITLE\r\n"
+            "DUE;VALUE=DATE:20261112\r\n"
+            "END:VTODO\r\nEND:VCALENDAR\r\n")}
         route="/api/v1/import-tasks.ics?dry_run=1&redact_titles=1&preflight=1"
         status,report=self.request("POST",route,self.owner,body)
         self.assertEqual(status,200)
@@ -969,9 +969,9 @@ class CalendarAPITests(unittest.TestCase):
                 "POST","/api/v1/import-tasks.ics"+query,self.owner,body)[0],
                 400,query)
         supported=dict(body,ics=(
-            "BEGIN:VCALENDAR\\r\\nVERSION:2.0\\r\\nBEGIN:VTODO\\r\\n"
-            "UID:good@example.invalid\\r\\nSUMMARY:PRIVATE TITLE\\r\\n"
-            "END:VTODO\\r\\nEND:VCALENDAR\\r\\n"))
+            "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nBEGIN:VTODO\r\n"
+            "UID:good@example.invalid\r\nSUMMARY:PRIVATE TITLE\r\n"
+            "END:VTODO\r\nEND:VCALENDAR\r\n"))
         status,ok=self.request("POST",route,self.owner,supported)
         self.assertEqual(status,200)
         self.assertEqual(ok,{"importable":True,"reason_codes":[],
