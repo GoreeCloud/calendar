@@ -16,6 +16,7 @@ import sqlite3
 import threading
 import time
 import uuid
+from contextlib import contextmanager
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
@@ -91,12 +92,18 @@ class Failure(Exception):
 def now() -> str:
     return dt.datetime.now(UTC).isoformat(timespec="seconds").replace("+00:00", "Z")
 
-def database(path: str) -> sqlite3.Connection:
+@contextmanager
+def database(path: str):
+    """Commit or roll back and ALWAYS close the connection on request exit."""
     connection = sqlite3.connect(path, timeout=10)
-    connection.row_factory = sqlite3.Row
-    connection.execute("PRAGMA foreign_keys=ON")
-    connection.execute("PRAGMA busy_timeout=10000")
-    return connection
+    try:
+        connection.row_factory = sqlite3.Row
+        connection.execute("PRAGMA foreign_keys=ON")
+        connection.execute("PRAGMA busy_timeout=10000")
+        with connection:
+            yield connection
+    finally:
+        connection.close()
 
 def init_database(path: str) -> None:
     target = Path(path)

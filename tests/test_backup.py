@@ -111,6 +111,25 @@ class BackupTests(unittest.TestCase):
                 restore_database(broken,destination)
             self.assertFalse(Path(destination).exists())
 
+    def test_database_context_closes_and_rolls_back_on_error(self):
+        from calendar_app.core import database
+        with tempfile.TemporaryDirectory() as folder:
+            source=str(Path(folder)/"rollback.db")
+            create_user(source,"db-close@example.test","long-enough-password-123")
+            with database(source) as conn:
+                conn.execute("UPDATE calendars SET name='Committed'")
+            with self.assertRaises(sqlite3.ProgrammingError):
+                conn.execute("SELECT 1")
+            with self.assertRaises(RuntimeError):
+                with database(source) as transaction:
+                    transaction.execute("UPDATE calendars SET name='Rolled back'")
+                    raise RuntimeError("Abort transaction")
+            with self.assertRaises(sqlite3.ProgrammingError):
+                transaction.execute("SELECT 1")
+            with database(source) as check:
+                self.assertEqual(check.execute("SELECT name FROM calendars").fetchone()[0],
+                                 "Committed")
+
     def test_snapshot_includes_live_wal_changes(self):
         with tempfile.TemporaryDirectory() as folder:
             source=str(Path(folder)/"live.db")
