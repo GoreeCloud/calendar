@@ -37,10 +37,10 @@ class CalendarClient(Gtk.Application):
         if getattr(self,"window",None):
             self.window.present();return
         css=Gtk.CssProvider()
-        css.load_from_data(b"""window{background:#f5f7fc;color:#182340}
-        .surface{background:white;border:1px solid #e1e6f0;border-radius:18px;padding:22px}
-        .title{font-size:26px;font-weight:800}.hint{color:#64718b}
-        button.suggested-action{background:#4d5cc8;color:white;border-radius:12px;padding:9px}""")
+        css.load_from_data(b"""window{background:#f5f7fc;color:#182340;}
+        .surface{background:white;border:1px solid #e1e6f0;border-radius:18px;padding:22px;}
+        .title{font-size:26px;font-weight:800;}.hint{color:#64718b;}
+        button.suggested-action{background:#4d5cc8;color:white;border-radius:12px;padding:9px;}""")
         display=Gdk.Display.get_default()
         if display:Gtk.StyleContext.add_provider_for_display(display,css,Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
         self.window=Gtk.ApplicationWindow(application=self,title="GoreeCloud Calendar")
