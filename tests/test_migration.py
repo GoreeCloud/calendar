@@ -39,12 +39,11 @@ class LegacyMembershipMigrationTests(unittest.TestCase):
             path=str(Path(folder)/"old-tasks.sqlite3")
             legacy=SCHEMA.replace(
                 "  created_at TEXT NOT NULL, updated_at TEXT NOT NULL,\n"
-                "  priority INTEGER NOT NULL DEFAULT 3 CHECK(priority BETWEEN 1 AND 4)\n"
+                "  priority INTEGER NOT NULL DEFAULT 3 CHECK(priority BETWEEN 1 AND 4),\n"
+                "  version INTEGER NOT NULL DEFAULT 1 CHECK(version >= 1)\n"
                 ");\nCREATE INDEX IF NOT EXISTS idx_tasks_calendar",
                 "  created_at TEXT NOT NULL, updated_at TEXT NOT NULL\n"
                 ");\nCREATE INDEX IF NOT EXISTS idx_tasks_calendar")
-            legacy=legacy.replace(
-                ",\n  version INTEGER NOT NULL DEFAULT 1 CHECK(version >= 1)", "")
             self.assertNotIn("priority INTEGER",legacy)
             self.assertNotIn("version INTEGER",legacy)
             with sqlite3.connect(path) as conn:
