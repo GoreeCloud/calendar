@@ -467,6 +467,13 @@ $("share-form").addEventListener("submit",async e=>{
     await loadMembers();toast("Calendar access updated.");
   }catch(error){toast(error.message);}
 });
+// If a draft changes after a failed create, it becomes a new logical request.
+$("event-form").addEventListener("input",()=>{
+  if(!state.editing)state.newEventRequestId=newRequestId();
+});
+$("task-form").addEventListener("input",()=>{
+  if(!state.editingTask)state.newTaskRequestId=newRequestId();
+});
 $("event-form").addEventListener("submit",saveEvent);
 $("event-repeat").addEventListener("change",()=>$("repeat-fields").hidden=$("event-repeat").value==="NONE");
 $("calendar-form").addEventListener("submit",async e=>{

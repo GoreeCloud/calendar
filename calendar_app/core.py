@@ -218,10 +218,9 @@ def _request_id(body: dict) -> str | None:
 
 def _existing_request(db, user: str, kind: str, key: str | None,
                       payload: dict, cid: str):
-    if key is None:
-        return None,None
-    payload_hash=hashlib.sha256(json.dumps(payload,sort_keys=True,
+    payload_hash=(hashlib.sha256(json.dumps(payload,sort_keys=True,
         ensure_ascii=False,separators=(",",":")).encode("utf-8")).hexdigest()
+        if key is not None else None)
     db.execute("BEGIN IMMEDIATE")
     # Recheck permission under the writer lock, not only before it.
     own=db.execute("SELECT owner_id FROM calendars WHERE id=?",(cid,)).fetchone()
@@ -229,6 +228,8 @@ def _existing_request(db, user: str, kind: str, key: str | None,
                     "AND user_id=?",(cid,user)).fetchone()
     if own is None or (own["owner_id"]!=user and (edit is None or edit["role"]!="edit")):
         raise Failure(403,"Calendar write permission was revoked")
+    if key is None:
+        return None,None
     expires=(dt.datetime.now(UTC)-dt.timedelta(days=7)).isoformat(
         timespec="seconds").replace("+00:00","Z")
     db.execute("DELETE FROM create_requests WHERE created_at<?",(expires,))
