@@ -7,6 +7,7 @@ future application feature or an external restore workflow.
 import os
 import sqlite3
 import tempfile
+from contextlib import closing
 from pathlib import Path
 
 
@@ -24,13 +25,15 @@ def backup_database(source: str, destination: str) -> None:
         os.fchmod(handle, 0o600)
         os.close(handle)
         handle = -1
-        with sqlite3.connect(str(src), timeout=30) as original, sqlite3.connect(temporary, timeout=30) as snapshot:
-            original.backup(snapshot)
-            check = snapshot.execute("PRAGMA integrity_check").fetchone()
-            if check is None or check[0] != "ok":
-                raise ValueError("Backup integrity check failed")
-            if snapshot.execute("PRAGMA foreign_key_check").fetchone() is not None:
-                raise ValueError("Backup contains invalid foreign-key references")
+        with closing(sqlite3.connect(str(src), timeout=30)) as original, \
+             closing(sqlite3.connect(temporary, timeout=30)) as snapshot:
+            with original, snapshot:
+                original.backup(snapshot)
+                check = snapshot.execute("PRAGMA integrity_check").fetchone()
+                if check is None or check[0] != "ok":
+                    raise ValueError("Backup integrity check failed")
+                if snapshot.execute("PRAGMA foreign_key_check").fetchone() is not None:
+                    raise ValueError("Backup contains invalid foreign-key references")
         verify = os.open(temporary, os.O_RDONLY)
         try:
             os.fsync(verify)
@@ -61,7 +64,7 @@ def verify_backup(path: str) -> bool:
     source = source.resolve()
     uri = "file:" + quote(str(source), safe="/") + "?mode=ro"
     try:
-        with sqlite3.connect(uri, uri=True, timeout=20) as connection:
+        with closing(sqlite3.connect(uri, uri=True, timeout=20)) as connection:
             check = connection.execute("PRAGMA integrity_check").fetchone()
             if check is None or check[0] != "ok":
                 raise ValueError("Backup integrity check failed")
