@@ -221,6 +221,8 @@ def parse_calendar(content: str) -> list[dict]:
             continue
         if name in ("BEGIN","END") and component not in ("VEVENT","VALARM"):
             raise ImportErrorCalendar("Unsupported iCalendar component: "+component)
+        if current is None and name in ("BEGIN","END") and component=="VALARM":
+            raise ImportErrorCalendar("VALARM must be inside a VEVENT")
         if current is None and name not in ("BEGIN","END"):
             if name=="METHOD":
                 raise ImportErrorCalendar("Scheduling METHOD is unsupported for file import")

@@ -874,6 +874,7 @@ class CalendarAPITests(unittest.TestCase):
             base.replace("END:VEVENT","ATTENDEE:mailto:friend@example.test\r\nEND:VEVENT"),
             base.replace("END:VEVENT","BEGIN:VTODO\r\nEND:VTODO\r\nEND:VEVENT"),
             base.replace("VERSION:2.0","VERSION:2.0\r\nMETHOD:CANCEL"),
+            base.replace("BEGIN:VEVENT","BEGIN:VALARM\r\nEND:VALARM\r\nBEGIN:VEVENT"),
         ]
         for content in bad:
             status,result=self.request("POST","/api/v1/import.ics",self.owner,
