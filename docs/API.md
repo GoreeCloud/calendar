@@ -98,3 +98,7 @@ GET `/api/v1/export-tasks.ics?calendar_id=...` creates a separate `text/calendar
 ## Import semantics and silent-loss prevention
 
 Event `.ics` imports reject unsupported top-level scheduling `METHOD` instructions, mixed VTODO components, unsupported nested components, attendee/organizer/attachment/classification fields and unknown VEVENT properties rather than silently discarding them. `STATUS:CONFIRMED` and `TRANSP:OPAQUE` are accepted as equivalent to the local busy event model, but `STATUS:CANCELLED/TENTATIVE` and `TRANSP:TRANSPARENT` are rejected because treating them as ordinary events would misstate availability. Known VTIMEZONE containers may accompany supported IANA TZIDs, but timezone transitions are resolved using host IANA zone data rather than imported VTIMEZONE definitions. File import is not scheduling-message processing or full RFC 5545 roundtrip fidelity; use separate VEVENT and VTODO file flows.
+
+## ICS import dry-run previews
+
+POST `/api/v1/import.ics?dry_run=1` and POST `/api/v1/import-tasks.ics?dry_run=1` parse and validate the selected file, enforce owner/edit calendar permissions, check already imported UIDs and return HTTP 200 with `total`, `would_import`, `would_skip` and up to five `sample_titles`. They make no writes. Values other than `0` and `1` for `dry_run` are rejected. The browser asks for confirmation before an actual import. Preview results are not reserved: permissions and duplicate counts may change; the final import transaction checks both again.

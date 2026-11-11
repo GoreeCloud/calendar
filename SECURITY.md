@@ -54,3 +54,7 @@ The optional VTODO-only import/export endpoints enforce calendar read/write perm
 ## Conservative event ICS semantics
 
 The event importer now rejects mixed VTODO files, cancellation METHODS, canceled/tentative or transparent VEVENT semantics and fields without an application representation. These validation failures occur before SQL inserts, preventing silently treating cancellations and non-busy entries as active busy events. Only confirmed/opaque statuses map to the supported event model. This is conservative portability, not a general-purpose iCalendar scheduling engine.
+
+## ICS preview safety
+
+Both import routes support authenticated `dry_run=1` previews without database mutation. Import confirmation is explicit in the browser; permissions and duplicate UIDs are re-evaluated in the actual transaction. Preview responses include only counts and up to five task/event titles from the user's own uploaded file; no additional account data or credentials are exposed.

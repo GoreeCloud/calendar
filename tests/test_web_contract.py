@@ -57,6 +57,13 @@ class WebContractTests(unittest.TestCase):
         self.assertEqual(self.parser.scripts,["/app.js"])
         self.assertEqual(self.parser.external_assets,["/styles.css"])
 
+    def test_imports_show_dry_run_before_confirmation(self):
+        for suffix in ("/import.ics?dry_run=1","/import-tasks.ics?dry_run=1"):
+            self.assertIn(suffix,self.js)
+        self.assertIn("would_import",self.js)
+        self.assertIn("would_skip",self.js)
+        self.assertIn("confirm(",self.js)
+
     def test_privacy_controls_are_visible_in_markup(self):
         for control in ("availability-dialog","calendar-settings-dialog",
                         "share-role","task-priority","event-reminder"):

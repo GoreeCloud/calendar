@@ -76,3 +76,7 @@ Original repository source is [MIT licensed](LICENSE). Future third-party depend
 ### Recovery caution
 
 The `restore-backup` command is an offline, no-clobber extraction and verification tool. It cannot automatically migrate DNS, containers, application identities, attached volumes, encryption keys or reverse-proxy routes. A running deployment requires a separately reviewed cutover and rollback plan. A green CI restore test is not production disaster-recovery acceptance.
+
+### Safe manual imports
+
+The browser previews both VEVENT and VTODO .ics file imports, showing proposed new/duplicate counts and up to five titles, and requires explicit confirmation before writing. The preview performs no mutations and is advisory because calendar membership or UID counts can change before the final import transaction. This is not live synchronization.

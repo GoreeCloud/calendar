@@ -35,3 +35,5 @@
 ## Explicit limitations
 
 No production deployment or reviewed release. No invitation email, sharing federation or E2EE; no offline edits, reliable background/push notifications, CalDAV, per-instance recurrence overrides, public publishing, meeting coordination or AI. Linux and Android require device testing and formal package/release acceptance. Photo albums excluded.
+
+- Separate authenticated no-write VEVENT and VTODO import previews, with duplicate estimates and explicit browser confirmation before import. Estimates may change before commit.

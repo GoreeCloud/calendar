@@ -747,8 +747,12 @@ $("import-task-file").addEventListener("change",async()=>{
   if(!calendar){toast("No visible editable calendar for importing tasks.");return;}
   if(file.size>55000){toast("Import at most 55 KB and 100 VTODO tasks per file.");return;}
   try{
-    const result=await api("/import-tasks.ics",{method:"POST",
-      body:{calendar_id:calendar.id,ics:await file.text()}});
+    const body={calendar_id:calendar.id,ics:await file.text()};
+    const preview=await api("/import-tasks.ics?dry_run=1",{method:"POST",body});
+    if(!confirm("This file contains "+preview.total+" task(s).\n"+
+      preview.would_import+" new, "+preview.would_skip+" already imported.\n"+
+      preview.sample_titles.join("\n")+"\n\nImport into "+calendar.name+"?"))return;
+    const result=await api("/import-tasks.ics",{method:"POST",body});
     await refresh();
     toast("Imported "+result.imported+" task(s); skipped "+result.skipped+" duplicate(s).");
   }catch(error){toast(error.message);}
@@ -761,7 +765,13 @@ $("import-file").addEventListener("change",async ()=>{
   if(!cid){toast("Choose a visible calendar to import into.");return;}
   if(file.size>55000){toast("Import at most 55 KB and 100 events per file.");return;}
   try{
-    const result=await api("/import.ics",{method:"POST",body:{calendar_id:cid,ics:await file.text()}});
+    const body={calendar_id:cid,ics:await file.text()};
+    const preview=await api("/import.ics?dry_run=1",{method:"POST",body});
+    const calendar=state.calendars.find(c=>c.id===cid);
+    if(!confirm("This file contains "+preview.total+" event(s).\n"+
+      preview.would_import+" new, "+preview.would_skip+" already imported.\n"+
+      preview.sample_titles.join("\n")+"\n\nImport into "+(calendar?.name||"selected calendar")+"?"))return;
+    const result=await api("/import.ics",{method:"POST",body});
     await refresh();toast("Imported "+result.imported+" event(s); skipped "+result.skipped+" duplicate(s).");
   }catch(error){toast(error.message);}
 });
