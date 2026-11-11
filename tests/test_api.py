@@ -795,6 +795,69 @@ class CalendarAPITests(unittest.TestCase):
         self.assertEqual(responses[0][1]["id"],responses[1][1]["id"])
         self.assertEqual(len(self.request("GET","/api/v1/tasks",self.owner)[1]["tasks"]),1)
 
+    def test_vtodo_import_export_roundtrip_permissions_and_deduplication(self):
+        cid=self.calendar(self.owner)
+        status,created=self.request("POST","/api/v1/tasks",self.owner,{
+            "calendar_id":cid,"title":"Prepare café notes","priority":2,
+            "due_at":"2026-11-10T16:15:00Z"})
+        self.assertEqual(status,201,created)
+        self.assertEqual(self.request("PATCH","/api/v1/tasks/"+created["id"],self.owner,
+            {"version":1,"done":True})[0],200)
+        endpoint="/api/v1/export-tasks.ics?calendar_id="+cid
+        status,raw=self.request("GET",endpoint,self.owner,ics=True)
+        self.assertEqual(status,200)
+        self.assertIn("BEGIN:VTODO",raw)
+        self.assertIn("STATUS:COMPLETED",raw)
+        self.assertIn("PRIORITY:3",raw)
+        self.assertIn("DUE:20261110T161500Z",raw)
+        self.assertIn("SUMMARY:Prepare café notes",raw.replace("\r\n ",""))
+        target=self.calendar(self.other)
+        result=self.request("POST","/api/v1/import-tasks.ics",self.other,
+            {"calendar_id":target,"ics":raw})
+        self.assertEqual(result,(201,{"imported":1,"skipped":0}))
+        self.assertEqual(self.request("POST","/api/v1/import-tasks.ics",self.other,
+            {"calendar_id":target,"ics":raw}),
+            (201,{"imported":0,"skipped":1}))
+        saved=self.request("GET","/api/v1/tasks",self.other)[1]["tasks"]
+        self.assertEqual((saved[0]["title"],saved[0]["priority"],saved[0]["done"],
+                          saved[0]["due_at"]),
+                         ("Prepare café notes",2,1,"2026-11-10T16:15:00Z"))
+        status,imported=self.request("GET",
+            "/api/v1/export-tasks.ics?calendar_id="+target,self.other,ics=True)
+        self.assertEqual(status,200)
+        self.assertIn("UID:"+created["id"]+"@goreecloud.local",imported)
+        self.assertEqual(self.request("POST","/api/v1/import-tasks.ics",self.other,
+            {"calendar_id":cid,"ics":raw})[0],404)
+        self.assertEqual(self.request("GET",endpoint,self.other)[0],404)
+        self.assertEqual(self.request("GET",endpoint)[0],401)
+        self.assertEqual(self.request("POST","/api/v1/calendars/"+cid+"/members",self.owner,
+            {"email":"other@example.test","role":"freebusy"})[0],200)
+        self.assertEqual(self.request("GET",endpoint,self.other)[0],403)
+        self.assertEqual(self.request("POST","/api/v1/import-tasks.ics",self.other,
+            {"calendar_id":cid,"ics":raw})[0],403)
+        self.assertEqual(self.request("POST","/api/v1/calendars/"+cid+"/members",self.owner,
+            {"email":"other@example.test","role":"read"})[0],200)
+        self.assertEqual(self.request("GET",endpoint,self.other,ics=True)[0],200)
+        self.assertEqual(self.request("POST","/api/v1/import-tasks.ics",self.other,
+            {"calendar_id":cid,"ics":raw})[0],403)
+
+    def test_vtodo_import_rejects_unsupported_semantics_without_mutation(self):
+        cid=self.calendar(self.owner)
+        baseline=("BEGIN:VCALENDAR\r\nVERSION:2.0\r\nBEGIN:VTODO\r\n"
+                  "UID:todo@example.test\r\nSUMMARY:Check backup\r\n"
+                  "STATUS:NEEDS-ACTION\r\nPRIORITY:5\r\nEND:VTODO\r\nEND:VCALENDAR\r\n")
+        for invalid in (
+            baseline.replace("END:VTODO","RRULE:FREQ=DAILY;COUNT=2\r\nEND:VTODO"),
+            baseline.replace("END:VTODO","DESCRIPTION:Lost field\r\nEND:VTODO"),
+            baseline.replace("END:VTODO","ATTENDEE:mailto:someone@example.test\r\nEND:VTODO"),
+            baseline.replace("END:VTODO","BEGIN:VALARM\r\nEND:VALARM\r\nEND:VTODO"),
+            baseline.replace("PRIORITY:5","PRIORITY:99")
+        ):
+            status,_=self.request("POST","/api/v1/import-tasks.ics",self.owner,
+                {"calendar_id":cid,"ics":invalid})
+            self.assertEqual(status,400,invalid)
+        self.assertEqual(self.request("GET","/api/v1/tasks",self.owner)[1]["tasks"],[])
+
     def test_logout_and_security_headers(self):
         self.assertEqual(self.request("GET","/api/v1/calendars")[0],401)
         self.assertEqual(self.request("POST","/api/v1/register",body={})[0],401)

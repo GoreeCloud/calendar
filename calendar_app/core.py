@@ -89,6 +89,13 @@ CREATE TABLE IF NOT EXISTS create_requests (
   PRIMARY KEY (user_id,kind,request_id)
 );
 CREATE INDEX IF NOT EXISTS idx_create_requests_age ON create_requests(created_at);
+CREATE TABLE IF NOT EXISTS imported_task_uids (
+  calendar_id TEXT NOT NULL REFERENCES calendars(id) ON DELETE CASCADE,
+  external_uid TEXT NOT NULL,
+  task_id TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+  PRIMARY KEY (calendar_id, external_uid)
+);
+CREATE INDEX IF NOT EXISTS idx_imported_task_uids_task ON imported_task_uids(task_id);
 """
 
 class Failure(Exception):
@@ -940,6 +947,62 @@ class CalendarHandler(BaseHTTPRequestHandler):
                     raise Failure(409,"Task was changed or access revoked; refresh")
                 db.commit()
                 return self._send(200,{"ok":True,"version":version+1})
+            if path == "/api/v1/import-tasks.ics" and method == "POST":
+                body=self._body()
+                if set(body)!={"calendar_id","ics"}:
+                    raise Failure(400,"Calendar and task ICS content required")
+                cid=_text(body["calendar_id"],"calendar_id",64,True)
+                self._accessible_calendar(db,user,cid,write=True)
+                from .vtodo import parse_tasks
+                from .ical import ImportErrorCalendar
+                try:
+                    tasks=parse_tasks(body["ics"])
+                except ImportErrorCalendar as error:
+                    raise Failure(400,str(error)) from None
+                db.execute("BEGIN IMMEDIATE")
+                # Permission may have been revoked after content was parsed.
+                self._accessible_calendar(db,user,cid,write=True)
+                imported,skipped=0,0
+                for task in tasks:
+                    previous=db.execute("SELECT task_id FROM imported_task_uids "
+                        "WHERE calendar_id=? AND external_uid=?",
+                        (cid,task["uid"])).fetchone()
+                    if previous is not None:
+                        skipped+=1
+                        continue
+                    tid=uuid.uuid4().hex
+                    moment=now()
+                    db.execute("INSERT INTO tasks "
+                        "(id,calendar_id,title,due_at,done,created_at,updated_at,priority,version) "
+                        "VALUES(?,?,?,?,?,?,?,?,?)",
+                        (tid,cid,task["title"],task["due_at"],task["done"],
+                         moment,moment,task["priority"],1))
+                    db.execute("INSERT INTO imported_task_uids VALUES(?,?,?)",
+                               (cid,task["uid"],tid))
+                    imported+=1
+                db.commit()
+                return self._send(201,{"imported":imported,"skipped":skipped})
+            if path == "/api/v1/export-tasks.ics" and method == "GET":
+                cid=parse_qs(route.query).get("calendar_id",[None])[0]
+                access=self._accessible_calendar(db,user,cid or "")
+                if access["role"]=="freebusy":
+                    raise Failure(403,"Free/busy access cannot export tasks")
+                records=db.execute(
+                    "SELECT t.*, (SELECT m.external_uid FROM imported_task_uids m "
+                    "WHERE m.task_id=t.id AND m.calendar_id=t.calendar_id LIMIT 1) "
+                    "AS original_uid FROM tasks t WHERE t.calendar_id=? "
+                    "ORDER BY t.created_at,t.id LIMIT 501",(cid,)).fetchall()
+                if len(records)>500:
+                    raise Failure(413,"Too many tasks for one ICS export")
+                from .vtodo import export_tasks
+                from .ical import ImportErrorCalendar
+                try:
+                    raw=export_tasks([dict(record) for record in records]).encode("utf-8")
+                except ImportErrorCalendar as error:
+                    raise Failure(422,str(error)) from None
+                self._headers(200,"text/calendar; charset=utf-8",len(raw))
+                self.wfile.write(raw)
+                return
             if path == "/api/v1/import.ics" and method == "POST":
                 body = self._body()
                 if set(body) != {"calendar_id", "ics"}:
