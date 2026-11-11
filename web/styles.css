@@ -217,3 +217,8 @@ nav#desktop-nav{display:flex;flex-direction:column;gap:5px}
 .task-priority-marker.priority-1{color:var(--gc-negative)}
 .task-priority-marker.priority-2{color:var(--gc-brand)}
 @media(max-width:650px){.task-header{flex-wrap:wrap}.task-header .task-filter{order:2;min-width:100%;max-width:100%}}
+
+/* VTODO import/export actions live in the Tasks view, not the global toolbar. */
+.task-header{flex-wrap:wrap}
+.task-header .task-ics-action{white-space:nowrap}
+@media(max-width:650px){.task-header .task-ics-action{flex:1;justify-content:center}}

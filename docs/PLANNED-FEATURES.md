@@ -64,3 +64,7 @@ Private scheduling candidates across up to five local calendars, owner-only JSON
 ## Network retries and synchronization (November 2026)
 
 Calendar now has optional seven-day idempotent creates and optimistic version checks on events/tasks as **local foundations** for safe retries and conflict detection. Remaining interoperability work: durable encrypted offline queues; full conflict-merge user experience; canonical DAV ownership, ETag/If-Match, sync-token/pagination and deletion tombstones; identity federation; server-side permission revocation propagation and cross-device acceptance. Do not equate these implemented primitives with two-way or offline sync.
+
+## Task iCalendar integration boundary (November 11, 2026)
+
+A limited VTODO-only import/export for manual file exchange is source-implemented. It preserves task title, due datetime, complete/incomplete state and mapped priority with UID-based deduplication but deliberately rejects unsupported task fields. VTODO exceptions, task recurrence, full CalDAV task collections, sync tokens, two-way reconciliation, encrypted offline queues and identity federation remain planned; do not infer these from an .ics exchange file.

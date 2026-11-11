@@ -211,8 +211,16 @@ function renderTasks(){
   });
   filter.value=state.taskFilter;
   filter.addEventListener("change",()=>{state.taskFilter=filter.value;renderTasks();});
+  const importTasks=el("button","secondary task-ics-action","↑ Import tasks");
+  importTasks.type="button";
+  importTasks.setAttribute("aria-label","Import VTODO tasks from an iCalendar file");
+  importTasks.addEventListener("click",()=>$("import-task-file").click());
+  const exportTasks=el("button","secondary task-ics-action","↓ Export tasks");
+  exportTasks.type="button";
+  exportTasks.setAttribute("aria-label","Export VTODO tasks to an iCalendar file");
+  exportTasks.addEventListener("click",exportTaskCalendar);
   const add=el("button","primary","＋ Add task");add.addEventListener("click",()=>openTask());
-  head.append(filter,add);root.append(head);
+  head.append(filter,importTasks,exportTasks,add);root.append(head);
   const todayStart=byDay(new Date()).getTime(),tomorrow=addDays(new Date(),1).getTime();
   const selected=state.tasks.filter(task=>{
     if(state.hidden.has(task.calendar_id))return false;
@@ -717,6 +725,33 @@ $("search-form").addEventListener("submit",async e=>{
     const results=await api("/search?q="+encodeURIComponent(q));
     renderSearch(results);
   }catch(error){$("search-results").replaceChildren(el("p","error",error.message));}
+});
+async function exportTaskCalendar(){
+  const calendar=state.calendars.find(c=>!state.hidden.has(c.id)&&c.role!=="freebusy");
+  if(!calendar){toast("Choose a visible calendar with task access.");return;}
+  try{
+    const response=await fetch("/api/v1/export-tasks.ics?calendar_id="+encodeURIComponent(calendar.id),
+      {headers:{Authorization:"Bearer "+state.token},redirect:"error"});
+    if(!response.ok)throw new Error("Unable to export tasks.");
+    const blob=await response.blob(),url=URL.createObjectURL(blob),link=el("a");
+    link.href=url;
+    link.download="goreecloud-tasks.ics";
+    document.body.append(link);link.click();link.remove();URL.revokeObjectURL(url);
+    toast("Task calendar exported. Protect the downloaded file.");
+  }catch(error){toast(error.message);}
+}
+$("import-task-file").addEventListener("change",async()=>{
+  const input=$("import-task-file"),file=input.files?.[0];input.value="";
+  if(!file)return;
+  const calendar=state.calendars.find(c=>!state.hidden.has(c.id)&&canEdit(c.id));
+  if(!calendar){toast("No visible editable calendar for importing tasks.");return;}
+  if(file.size>55000){toast("Import at most 55 KB and 100 VTODO tasks per file.");return;}
+  try{
+    const result=await api("/import-tasks.ics",{method:"POST",
+      body:{calendar_id:calendar.id,ics:await file.text()}});
+    await refresh();
+    toast("Imported "+result.imported+" task(s); skipped "+result.skipped+" duplicate(s).");
+  }catch(error){toast(error.message);}
 });
 $("import-btn").addEventListener("click",()=>$("import-file").click());
 $("import-file").addEventListener("change",async ()=>{
