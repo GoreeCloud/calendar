@@ -66,6 +66,22 @@ jobs:
             echo "GTK client failed to remain open in the virtual display (exit: $code)"
             exit 1
           fi
+      - name: Exercise native login, origin safety and Calendar/Tasks pane rendering
+        shell: bash
+        run: |
+          set -euo pipefail
+          log="$(mktemp)"
+          trap 'rm -f "$log"' EXIT
+          if ! xvfb-run -a /usr/bin/python3 linux/tests/gui_smoke.py >"$log" 2>&1; then
+            cat "$log"
+            exit 1
+          fi
+          cat "$log"
+          grep -q '^CALENDAR_GTK4_LOGIN_ORIGIN_AND_NATIVE_PANES_SMOKE_PASS$' "$log"
+          if grep -E 'Gtk-WARNING|Gtk-CRITICAL|GLib-GObject-CRITICAL|Theme parser warning' "$log"; then
+            echo "::error::Native GTK emitted a parser or critical warning"
+            exit 1
+          fi
       - name: Verify per-user launcher installer
         run: |
           temp_home="$(mktemp -d)"
