@@ -4,7 +4,7 @@ const $ = id => document.getElementById(id);
 const state = {
   token: sessionStorage.getItem("gc-calendar-token"),
   calendars: [], events: [], tasks: [], view: "month",
-  anchor: new Date(), hidden: new Set(), editing: null, editingTask: null, taskFilter: "open", editingCalendar: null, sharingCalendar: null, loading: false
+  anchor: new Date(), hidden: new Set(), editing: null, editingTask: null, newTaskRequestId: null, newEventRequestId: null, taskFilter: "open", editingCalendar: null, sharingCalendar: null, loading: false
 };
 const byDay = d => new Date(d.getFullYear(),d.getMonth(),d.getDate());
 const addDays = (d,n) => {const v=byDay(d);v.setDate(v.getDate()+n);return v;};
@@ -61,6 +61,12 @@ async function refresh(){
   finally{state.loading=false;}
 }
 function calendarRole(id){return state.calendars.find(c=>c.id===id)?.role||"owner";}
+function newRequestId(){
+  if(!window.crypto?.getRandomValues)return null;
+  const bytes=new Uint8Array(16);
+  window.crypto.getRandomValues(bytes);
+  return Array.from(bytes,b=>b.toString(16).padStart(2,"0")).join("");
+}
 function canEdit(id){return ["owner","edit"].includes(calendarRole(id));}
 function renderCalendarList(){
   ["calendar-list","mobile-calendar-list"].forEach(id=>{
@@ -251,6 +257,7 @@ function fillCalendars(select,includeReadOnly=false){
 function openEvent(event=null,date=new Date()){
   if(!event&&!state.calendars.some(c=>canEdit(c.id))){toast("No editable calendar is available.");return;}
   state.editing=event;
+  state.newEventRequestId=event?null:newRequestId();
   const readOnly=Boolean(event&&!canEdit(event.calendar_id));
   fillCalendars($("event-calendar"),readOnly);
   $("event-dialog-title").textContent=readOnly?"Read-only event":event?.recurrence?"Edit recurring series":event?"Edit event":"New event";
@@ -281,6 +288,7 @@ function openTask(task=null){
   if(task&&!canEdit(task.calendar_id)){toast("This task belongs to a read-only calendar.");return;}
   if(!task&&!state.calendars.some(c=>canEdit(c.id))){toast("No editable calendar is available.");return;}
   state.editingTask=task;
+  state.newTaskRequestId=task?null:newRequestId();
   fillCalendars($("task-calendar"),Boolean(task));
   $("task-dialog-title").textContent=task?"Edit task":"New task";
   $("task-save").textContent=task?"Save task":"Add task";
@@ -328,7 +336,11 @@ async function saveEvent(evt){
   }
   try{
     if(state.editing){body.version=state.editing.version;await api("/events/"+state.editing.id,{method:"PATCH",body});}
-    else await api("/events",{method:"POST",body});
+    else {
+      if(state.newEventRequestId)body.client_request_id=state.newEventRequestId;
+      await api("/events",{method:"POST",body});
+      state.newEventRequestId=null;
+    }
     $("event-dialog").close();await refresh();toast("Event saved.");
   }catch(error){toast(error.message);}
 }
@@ -470,7 +482,10 @@ $("task-form").addEventListener("submit",async e=>{
     if(state.editingTask){
       await api("/tasks/"+state.editingTask.id,{method:"PATCH",body:{title,due_at,priority,version:state.editingTask.version}});
     }else{
-      await api("/tasks",{method:"POST",body:{title,due_at,priority,calendar_id:$("task-calendar").value}});
+      const body={title,due_at,priority,calendar_id:$("task-calendar").value};
+      if(state.newTaskRequestId)body.client_request_id=state.newTaskRequestId;
+      await api("/tasks",{method:"POST",body});
+      state.newTaskRequestId=null;
     }
     $("task-dialog").close();await refresh();toast("Task saved.");
   }catch(error){toast(error.message);}
