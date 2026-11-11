@@ -49,15 +49,30 @@ jobs:
       - run: node --check web/app.js
   linux:
     runs-on: ubuntu-latest
+    timeout-minutes: 12
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
-      - name: Install distribution GTK4 bindings
-        run: sudo apt-get update && sudo apt-get install -y python3-gi gir1.2-gtk-4.0
+      - name: Install GTK4/Xvfb dependencies with bounded APT network wait
+        shell: bash
+        run: |
+          set -euo pipefail
+          # A hosted APT DNS outage is an infrastructure failure, not a GUI pass.
+          if ! sudo timeout -k 5s 180s apt-get -o Acquire::Retries=1 \
+              -o APT::Update::Error-Mode=any -o Acquire::http::Timeout=20 \
+              -o Acquire::https::Timeout=20 update -qq; then
+            echo "::error::Calendar GTK test APT index update failed; GUI smoke not executed"
+            exit 1
+          fi
+          if ! sudo timeout -k 5s 180s apt-get -o Acquire::Retries=1 \
+              -o Acquire::http::Timeout=20 -o Acquire::https::Timeout=20 \
+              install -y --no-install-recommends python3-gi gir1.2-gtk-4.0 xvfb xauth; then
+            echo "::error::Calendar GTK test dependencies unavailable; GUI smoke not executed"
+            exit 1
+          fi
       - name: Verify native binding imports
         run: /usr/bin/python3 -c 'import gi; gi.require_version("Gtk", "4.0"); from gi.repository import Gtk; print(Gtk.MAJOR_VERSION)'
       - name: Smoke-test GTK application under virtual display
         run: |
-          sudo apt-get install -y xvfb
           set +e
           xvfb-run -a timeout 8s /usr/bin/python3 linux/calendar_gtk.py
           code=$?
