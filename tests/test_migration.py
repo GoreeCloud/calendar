@@ -44,8 +44,9 @@ class LegacyMembershipMigrationTests(unittest.TestCase):
                 ");\nCREATE INDEX IF NOT EXISTS idx_tasks_calendar",
                 "  created_at TEXT NOT NULL, updated_at TEXT NOT NULL\n"
                 ");\nCREATE INDEX IF NOT EXISTS idx_tasks_calendar")
-            self.assertNotIn("priority INTEGER",legacy)
-            self.assertNotIn("version INTEGER",legacy)
+            old_task_ddl=legacy.split("CREATE TABLE IF NOT EXISTS tasks (",1)[1].split(");",1)[0]
+            self.assertNotIn("priority INTEGER",old_task_ddl)
+            self.assertNotIn("version INTEGER",old_task_ddl)
             with sqlite3.connect(path) as conn:
                 conn.executescript(legacy)
                 conn.execute("INSERT INTO users VALUES(?,?,?,?,?)",
