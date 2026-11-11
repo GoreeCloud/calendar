@@ -104,6 +104,37 @@ def parse_tasks(content: str) -> list[dict]:
         raise ImportErrorCalendar("Incomplete or empty VTODO calendar")
     return entries
 
+
+def task_importability_report(content: str) -> dict:
+    """Non-mutating, title-free preflight for the *current* Calendar parser.
+
+    A successful report means the strict parser accepts the input, NOT that a
+    Calendar import/export round-trip is lossless. Codes describe recognized
+    blockers without echoing task titles, UIDs or raw source properties.
+    """
+    codes = set()
+    try:
+        lines = _read_lines(content)
+        in_task = False
+        for line in lines:
+            name, params, value = _property(line)
+            if name == "BEGIN" and value.upper() == "VTODO":
+                in_task = True
+            elif name == "END" and value.upper() == "VTODO":
+                in_task = False
+            elif in_task:
+                if name == "CLASS":
+                    codes.add("classification_not_supported")
+                elif name == "SEQUENCE":
+                    codes.add("sequence_not_supported")
+                elif name == "DUE" and params.get("VALUE", "").upper() == "DATE":
+                    codes.add("date_only_due_not_supported")
+        parse_tasks(content)
+    except ImportErrorCalendar:
+        if not codes:
+            codes.add("invalid_or_unsupported_ics")
+    return {"importable": not codes, "reason_codes": sorted(codes)}
+
 def export_tasks(entries: list[dict]) -> str:
     if len(entries)>MAX_EXPORT_TASKS:
         raise ImportErrorCalendar("Export at most 500 tasks at a time")
