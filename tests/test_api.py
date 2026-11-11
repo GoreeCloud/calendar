@@ -858,6 +858,34 @@ class CalendarAPITests(unittest.TestCase):
             self.assertEqual(status,400,invalid)
         self.assertEqual(self.request("GET","/api/v1/tasks",self.owner)[1]["tasks"],[])
 
+    def test_event_ics_rejects_silent_task_loss_and_cancellation_semantics(self):
+        cid=self.calendar(self.owner)
+        base=("BEGIN:VCALENDAR\r\nVERSION:2.0\r\nBEGIN:VEVENT\r\n"
+              "UID:event-one@example.test\r\n"
+              "DTSTART:20261110T160000Z\r\nDTEND:20261110T170000Z\r\n"
+              "SUMMARY:Planning\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n")
+        bad=[
+            base.replace("END:VCALENDAR",
+                "BEGIN:VTODO\r\nUID:task-one@example.test\r\n"
+                "SUMMARY:Task\r\nEND:VTODO\r\nEND:VCALENDAR"),
+            base.replace("END:VEVENT","STATUS:CANCELLED\r\nEND:VEVENT"),
+            base.replace("END:VEVENT","STATUS:TENTATIVE\r\nEND:VEVENT"),
+            base.replace("END:VEVENT","TRANSP:TRANSPARENT\r\nEND:VEVENT"),
+            base.replace("END:VEVENT","ATTENDEE:mailto:friend@example.test\r\nEND:VEVENT"),
+            base.replace("END:VEVENT","BEGIN:VTODO\r\nEND:VTODO\r\nEND:VEVENT"),
+            base.replace("VERSION:2.0","VERSION:2.0\r\nMETHOD:CANCEL"),
+        ]
+        for content in bad:
+            status,result=self.request("POST","/api/v1/import.ics",self.owner,
+                {"calendar_id":cid,"ics":content})
+            self.assertEqual(status,400,(content,result))
+        self.assertEqual(self.request("GET","/api/v1/events?start=2026-11-01T00:00:00Z"
+                         "&end=2026-12-01T00:00:00Z",self.owner)[1]["events"],[])
+        allowed=base.replace("END:VEVENT",
+            "STATUS:CONFIRMED\r\nTRANSP:OPAQUE\r\nEND:VEVENT")
+        self.assertEqual(self.request("POST","/api/v1/import.ics",self.owner,
+            {"calendar_id":cid,"ics":allowed})[1]["imported"],1)
+
     def test_logout_and_security_headers(self):
         self.assertEqual(self.request("GET","/api/v1/calendars")[0],401)
         self.assertEqual(self.request("POST","/api/v1/register",body={})[0],401)

@@ -50,3 +50,7 @@ Task and event mutations now require current versions for edits and deletions, w
 ## Task ICS privacy and interoperability
 
 The optional VTODO-only import/export endpoints enforce calendar read/write permissions separately from event ICS. Import is transactional and rechecks edit permissions after acquiring a SQLite write lock; a duplicate-UID ledger prevents repeated imports from multiplying tasks within the same calendar. Freebusy readers receive no task data. Parser limits (55,000 input characters and 100 components) and strict rejection of unsupported semantic fields reduce accidental data loss, but do not establish full RFC 5545/CalDAV compatibility. Export creates plaintext .ics that can contain sensitive task titles and due dates; protect downloaded files. No network-based DAV integration or background synchronization is configured.
+
+## Conservative event ICS semantics
+
+The event importer now rejects mixed VTODO files, cancellation METHODS, canceled/tentative or transparent VEVENT semantics and fields without an application representation. These validation failures occur before SQL inserts, preventing silently treating cancellations and non-busy entries as active busy events. Only confirmed/opaque statuses map to the supported event model. This is conservative portability, not a general-purpose iCalendar scheduling engine.

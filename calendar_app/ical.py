@@ -115,9 +115,19 @@ def _normalize(props: dict) -> dict:
     for field in ("UID", "DTSTART", "DTEND"):
         if field not in props:
             raise ImportErrorCalendar("VEVENT requires UID, DTSTART and DTEND")
-    for field in ("RDATE", "RECURRENCE-ID", "DURATION"):
+    supported={"UID","DTSTART","DTEND","SUMMARY","DESCRIPTION","LOCATION",
+               "RRULE","EXDATE","DTSTAMP","CREATED","LAST-MODIFIED",
+               "SEQUENCE","STATUS","TRANSP","_ALARM"}
+    unsupported=set(props)-supported
+    if unsupported:
+        raise ImportErrorCalendar("Unsupported VEVENT field: "+sorted(unsupported)[0])
+    # Unsupported calendar semantics must not be converted into a normal busy
+    # event. A cancellation or transparent event would otherwise become busy.
+    for field,expected in (("STATUS","CONFIRMED"),("TRANSP","OPAQUE")):
         if field in props:
-            raise ImportErrorCalendar("Recurrence exceptions and duration-only events are unsupported")
+            params,value=props[field]
+            if params or value.upper()!=expected:
+                raise ImportErrorCalendar("Unsupported VEVENT "+field+" semantics")
     uid = props["UID"][1].strip()
     if not uid or len(uid) > 255 or "\r" in uid or "\n" in uid:
         raise ImportErrorCalendar("Invalid event UID")
@@ -190,8 +200,33 @@ def parse_calendar(content: str) -> list[dict]:
     if not lines or lines[0].upper() != "BEGIN:VCALENDAR" or lines[-1].upper() != "END:VCALENDAR":
         raise ImportErrorCalendar("Expected a complete VCALENDAR")
     events, current, alarm, seen = [], None, None, set()
+    timezone_stack=[]
     for line in lines[1:-1]:
         name,params,value = _property(line)
+        component=value.upper()
+        if timezone_stack:
+            if name=="BEGIN":
+                if len(timezone_stack)!=1 or component not in ("STANDARD","DAYLIGHT"):
+                    raise ImportErrorCalendar("Malformed VTIMEZONE component")
+                timezone_stack.append(component)
+            elif name=="END":
+                if component!=timezone_stack[-1]:
+                    raise ImportErrorCalendar("Malformed VTIMEZONE nesting")
+                timezone_stack.pop()
+            # VTIMEZONE rules are not stored; only system IANA identifiers are
+            # honored by _date. No unsupported component can be hidden inside.
+            continue
+        if name=="BEGIN" and component=="VTIMEZONE" and current is None:
+            timezone_stack.append("VTIMEZONE")
+            continue
+        if name in ("BEGIN","END") and component not in ("VEVENT","VALARM"):
+            raise ImportErrorCalendar("Unsupported iCalendar component: "+component)
+        if current is None and name not in ("BEGIN","END"):
+            if name=="METHOD":
+                raise ImportErrorCalendar("Scheduling METHOD is unsupported for file import")
+            if name not in ("VERSION","PRODID","CALSCALE") and not name.startswith("X-"):
+                raise ImportErrorCalendar("Unsupported VCALENDAR property: "+name)
+            continue
         if name == "BEGIN" and value.upper() == "VEVENT":
             if current is not None:
                 raise ImportErrorCalendar("Nested VEVENT is unsupported")
@@ -229,8 +264,8 @@ def parse_calendar(content: str) -> list[dict]:
                 if name in current:
                     raise ImportErrorCalendar("Duplicate event property")
                 current[name] = (params,value)
-    if current is not None:
-        raise ImportErrorCalendar("Unterminated VEVENT")
+    if current is not None or timezone_stack:
+        raise ImportErrorCalendar("Unterminated iCalendar component")
     if not events:
         raise ImportErrorCalendar("Calendar contains no supported events")
     return events
