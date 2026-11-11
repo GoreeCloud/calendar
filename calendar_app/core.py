@@ -76,7 +76,8 @@ CREATE TABLE IF NOT EXISTS tasks (
   id TEXT PRIMARY KEY, calendar_id TEXT NOT NULL REFERENCES calendars(id) ON DELETE CASCADE,
   title TEXT NOT NULL, due_at TEXT, done INTEGER NOT NULL DEFAULT 0,
   created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
-  priority INTEGER NOT NULL DEFAULT 3 CHECK(priority BETWEEN 1 AND 4)
+  priority INTEGER NOT NULL DEFAULT 3 CHECK(priority BETWEEN 1 AND 4),
+  version INTEGER NOT NULL DEFAULT 1 CHECK(version >= 1)
 );
 CREATE INDEX IF NOT EXISTS idx_tasks_calendar ON tasks(calendar_id);
 """
@@ -125,6 +126,9 @@ def init_database(path: str) -> None:
         if "priority" not in task_columns:
             connection.execute("ALTER TABLE tasks ADD COLUMN priority "
                                "INTEGER NOT NULL DEFAULT 3 CHECK(priority BETWEEN 1 AND 4)")
+        if "version" not in task_columns:
+            connection.execute("ALTER TABLE tasks ADD COLUMN version "
+                               "INTEGER NOT NULL DEFAULT 1 CHECK(version >= 1)")
         connection.execute("PRAGMA journal_mode=WAL")
 
 def digest_password(password: str, salt: str) -> str:
@@ -795,28 +799,54 @@ class CalendarHandler(BaseHTTPRequestHandler):
                                "VALUES(?,?,?,?,?,?,?,?)",
                                (tid,cid,title,due,0,now(),now(),priority))
                     db.commit()
-                    return self._send(201, {"id":tid})
+                    return self._send(201, {"id":tid,"version":1})
             if path.startswith("/api/v1/tasks/") and method in ("PATCH", "DELETE"):
                 tid = path.rsplit("/", 1)[-1]
                 old = self._owned_item(db, "tasks", user, tid)
                 if method == "DELETE":
-                    db.execute("DELETE FROM tasks WHERE id=?", (tid,))
+                    query=parse_qs(route.query)
+                    try:
+                        version=int(query.get("version",[""])[0])
+                    except (ValueError,TypeError):
+                        raise Failure(428,"Current task version required") from None
+                else:
+                    body = self._body()
+                    if not body or not set(body) <= {"version","title", "done", "due_at", "priority"}:
+                        raise Failure(400, "Unknown task fields")
+                    version=body.get("version")
+                if type(version) is not int or version<1:
+                    raise Failure(428,"Current task version required")
+                if version!=old["version"]:
+                    raise Failure(409,"Task was changed on another device; refresh")
+                # Recheck calendar write role inside the conditional mutation:
+                # a simultaneous membership revocation cannot permit a stale write.
+                where=(" AND EXISTS (SELECT 1 FROM calendars c WHERE c.id=tasks.calendar_id "
+                       "AND (c.owner_id=? OR EXISTS (SELECT 1 FROM calendar_members m "
+                       "WHERE m.calendar_id=c.id AND m.user_id=? AND m.role='edit')))")
+                if method == "DELETE":
+                    changed=db.execute("DELETE FROM tasks WHERE id=? AND version=?"+where,
+                                       (tid,version,user,user))
+                    if not changed.rowcount:
+                        raise Failure(409,"Task was changed or access revoked; refresh")
                     db.commit()
                     return self._send(200, {"ok": True})
-                body = self._body()
-                if not body or not set(body) <= {"title", "done", "due_at", "priority"}:
-                    raise Failure(400, "Unknown task fields")
+                if len(body)==1:
+                    raise Failure(400,"Task update must include a change")
                 title = _text(body.get("title",old["title"]), "title", 160, True)
                 done = body.get("done", bool(old["done"]))
-                if not isinstance(done,bool):
+                if type(done) is not bool:
                     raise Failure(400,"Invalid done state")
                 due = _stamp(body["due_at"]) if body.get("due_at") else (
                     None if "due_at" in body else old["due_at"])
                 priority = _priority(body.get("priority",old["priority"]))
-                db.execute("UPDATE tasks SET title=?,done=?,due_at=?,priority=?,updated_at=? WHERE id=?",
-                           (title,int(done),due,priority,now(),tid))
+                updated=db.execute(
+                    "UPDATE tasks SET title=?,done=?,due_at=?,priority=?,updated_at=?,"
+                    "version=version+1 WHERE id=? AND version=?"+where,
+                    (title,int(done),due,priority,now(),tid,version,user,user))
+                if not updated.rowcount:
+                    raise Failure(409,"Task was changed or access revoked; refresh")
                 db.commit()
-                return self._send(200,{"ok":True})
+                return self._send(200,{"ok":True,"version":version+1})
             if path == "/api/v1/import.ics" and method == "POST":
                 body = self._body()
                 if set(body) != {"calendar_id", "ics"}:

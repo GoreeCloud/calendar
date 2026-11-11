@@ -237,10 +237,11 @@ class CalendarClient(Gtk.Application):
                 label.set_hexpand(True)
                 row.append(checkbox)
                 row.append(label)
-                def toggle(control,tid=task["id"]):
+                def toggle(control,tid=task["id"],version=task["version"]):
                     target=control.get_active()
                     self.run_async(
-                        lambda:self.request("PATCH","/tasks/"+tid,{"done":target},token=token),
+                        lambda:self.request("PATCH","/tasks/"+tid,
+                            {"done":target,"version":version},token=token),
                         lambda _:self.load_tasks() or False)
                 checkbox.connect("toggled",toggle)
                 row.set_margin_top(8);row.set_margin_bottom(8)

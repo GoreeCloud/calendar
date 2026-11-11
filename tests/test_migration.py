@@ -43,7 +43,10 @@ class LegacyMembershipMigrationTests(unittest.TestCase):
                 ");\nCREATE INDEX IF NOT EXISTS idx_tasks_calendar",
                 "  created_at TEXT NOT NULL, updated_at TEXT NOT NULL\n"
                 ");\nCREATE INDEX IF NOT EXISTS idx_tasks_calendar")
+            legacy=legacy.replace(
+                ",\n  version INTEGER NOT NULL DEFAULT 1 CHECK(version >= 1)", "")
             self.assertNotIn("priority INTEGER",legacy)
+            self.assertNotIn("version INTEGER",legacy)
             with sqlite3.connect(path) as conn:
                 conn.executescript(legacy)
                 conn.execute("INSERT INTO users VALUES(?,?,?,?,?)",
@@ -57,6 +60,8 @@ class LegacyMembershipMigrationTests(unittest.TestCase):
             with sqlite3.connect(path) as conn:
                 saved=conn.execute("SELECT title,priority FROM tasks WHERE id='task'").fetchone()
                 self.assertEqual(saved,("Legacy task",3))
+                self.assertEqual(conn.execute(
+                    "SELECT version FROM tasks WHERE id='task'").fetchone()[0],1)
                 conn.execute("UPDATE tasks SET priority=1 WHERE id='task'")
                 conn.commit()
             init_database(path)
@@ -64,6 +69,8 @@ class LegacyMembershipMigrationTests(unittest.TestCase):
                 self.assertEqual(conn.execute(
                     "SELECT priority FROM tasks WHERE id='task'").fetchone()[0],1)
                 self.assertEqual(conn.execute("PRAGMA integrity_check").fetchone()[0],"ok")
+                self.assertEqual(conn.execute(
+                    "SELECT version FROM tasks WHERE id='task'").fetchone()[0],1)
 
 if __name__=="__main__":
     unittest.main()

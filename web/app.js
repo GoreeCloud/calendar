@@ -224,14 +224,14 @@ function renderTasks(){
     const row=el("li","task-row"),check=el("input");
     check.type="checkbox";check.checked=!!t.done;check.disabled=!canEdit(t.calendar_id);
     check.setAttribute("aria-label","Complete "+t.title);
-    check.addEventListener("change",async()=>{try{await api("/tasks/"+t.id,{method:"PATCH",body:{done:check.checked}});await refresh();}catch(error){check.checked=!check.checked;toast(error.message);}});
+    check.addEventListener("change",async()=>{try{await api("/tasks/"+t.id,{method:"PATCH",body:{done:check.checked,version:t.version}});await refresh();}catch(error){check.checked=!check.checked;toast(error.message);}});
     const name=el("span","task-text"+(t.done?" completed":""),t.title);
     const tier=t.priority??3;
     const priorityText=["","P1 · Urgent","P2 · High","P3 · Normal","P4 · Low"][tier]||"P3 · Normal";
     name.append(el("small","task-priority-marker priority-"+tier,priorityText));
     if(t.due_at)name.append(el("small",null,"Due "+new Date(t.due_at).toLocaleString()));
     const del=el("button",null,"Delete");del.setAttribute("aria-label","Delete "+t.title);
-    del.addEventListener("click",async()=>{if(!confirm("Delete this task?"))return;try{await api("/tasks/"+t.id,{method:"DELETE"});await refresh();}catch(error){toast(error.message);}});
+    del.addEventListener("click",async()=>{if(!confirm("Delete this task?"))return;try{await api("/tasks/"+t.id+"?"+new URLSearchParams({version:String(t.version)}),{method:"DELETE"});await refresh();}catch(error){toast(error.message);}});
     row.append(check,name);
     if(canEdit(t.calendar_id)){
       const edit=el("button",null,"Edit");edit.setAttribute("aria-label","Edit "+t.title);
@@ -468,7 +468,7 @@ $("task-form").addEventListener("submit",async e=>{
   const priority=Number($("task-priority").value);
   try{
     if(state.editingTask){
-      await api("/tasks/"+state.editingTask.id,{method:"PATCH",body:{title,due_at,priority}});
+      await api("/tasks/"+state.editingTask.id,{method:"PATCH",body:{title,due_at,priority,version:state.editingTask.version}});
     }else{
       await api("/tasks",{method:"POST",body:{title,due_at,priority,calendar_id:$("task-calendar").value}});
     }

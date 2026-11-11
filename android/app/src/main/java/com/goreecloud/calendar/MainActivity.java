@@ -418,8 +418,10 @@ public final class MainActivity extends Activity {
                 params.topMargin=dp(8);
                 list.addView(taskButton,params);
                 String id=task.getString("id");
+                int version=task.getInt("version");
                 taskButton.setOnClickListener(v->perform(()->
-                    request("PATCH","/tasks/"+id,new JSONObject().put("done",!done),token),
+                    request("PATCH","/tasks/"+id,new JSONObject()
+                        .put("version",version).put("done",!done),token),
                     answer->{renderDashboard();}));
             }
             resultContainer.addView(list);

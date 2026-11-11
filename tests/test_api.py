@@ -73,9 +73,9 @@ class CalendarAPITests(unittest.TestCase):
         tid=data["id"]
         self.assertEqual(len(self.request("GET","/api/v1/tasks",self.owner)[1]["tasks"]),1)
         self.assertEqual(self.request("GET","/api/v1/tasks",self.other)[1]["tasks"],[])
-        self.assertEqual(self.request("PATCH","/api/v1/tasks/"+tid,self.other,{"done":True})[0],404)
-        self.assertEqual(self.request("PATCH","/api/v1/tasks/"+tid,self.owner,{"done":True})[0],200)
-        self.assertEqual(self.request("DELETE","/api/v1/tasks/"+tid,self.owner)[0],200)
+        self.assertEqual(self.request("PATCH","/api/v1/tasks/"+tid,self.other,{"version":1,"done":True})[0],404)
+        self.assertEqual(self.request("PATCH","/api/v1/tasks/"+tid,self.owner,{"version":1,"done":True})[0],200)
+        self.assertEqual(self.request("DELETE","/api/v1/tasks/"+tid+"?version=2",self.owner)[0],200)
         self.assertEqual(self.request("DELETE","/api/v1/calendars/"+cid,self.other)[0],404)
 
     def test_ics_and_input_validation(self):
@@ -489,9 +489,9 @@ class CalendarAPITests(unittest.TestCase):
         self.assertEqual(self.request("POST","/api/v1/tasks",self.owner,{
             "calendar_id":cid,"title":"Invalid","priority":5})[0],400)
         self.assertEqual(self.request("PATCH","/api/v1/tasks/"+urgent["id"],self.owner,
-                         {"priority":4})[0],200)
+                         {"version":1,"priority":4})[0],200)
         self.assertEqual(self.request("PATCH","/api/v1/tasks/"+urgent["id"],self.other,
-                         {"priority":1})[0],404)
+                         {"version":1,"priority":1})[0],404)
         result=self.request("GET","/api/v1/tasks",self.owner)[1]["tasks"]
         self.assertEqual(next(t["priority"] for t in result if t["id"]==urgent["id"]),4)
 
@@ -695,6 +695,44 @@ class CalendarAPITests(unittest.TestCase):
         self.assertEqual(self.request("GET","/api/v1/me",self.owner)[0],401)
         new=self.login("owner@example.test","fully-rotated-owner-password")
         self.assertEqual(self.request("GET","/api/v1/me",new)[0],200)
+
+    def test_task_versions_prevent_lost_updates_and_stale_deletes(self):
+        cid=self.calendar(self.owner)
+        status,new=self.request("POST","/api/v1/tasks",self.owner,{
+            "calendar_id":cid,"title":"Shared task","priority":2})
+        self.assertEqual((status,new["version"]),(201,1))
+        tid=new["id"]
+        route="/api/v1/tasks/"+tid
+        self.assertEqual(self.request("PATCH",route,self.owner,{"title":"Missing version"})[0],428)
+        self.assertEqual(self.request("PATCH",route,self.owner,
+            {"version":True,"title":"Invalid boolean"})[0],428)
+        self.assertEqual(self.request("DELETE",route,self.owner)[0],428)
+        status,updated=self.request("PATCH",route,self.owner,{"version":1,"title":"Correct edit"})
+        self.assertEqual((status,updated["version"]),(200,2))
+        self.assertEqual(self.request("PATCH",route,self.owner,
+            {"version":1,"priority":1})[0],409)
+        self.assertEqual(self.request("DELETE",route+"?version=1",self.owner)[0],409)
+        self.assertEqual(self.request("GET","/api/v1/tasks",self.owner)[1]["tasks"][0]["title"],
+                         "Correct edit")
+        self.assertEqual(self.request("DELETE",route+"?version=2",self.owner)[0],200)
+        self.assertEqual(self.request("GET","/api/v1/tasks",self.owner)[1]["tasks"],[])
+
+    def test_concurrent_task_mutation_single_winner(self):
+        cid=self.calendar(self.owner)
+        status,created=self.request("POST","/api/v1/tasks",self.owner,{
+            "calendar_id":cid,"title":"Two devices"})
+        self.assertEqual(status,201)
+        route="/api/v1/tasks/"+created["id"]
+        from concurrent.futures import ThreadPoolExecutor
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            futures=[pool.submit(self.request,"PATCH",route,self.owner,
+                                 {"version":1,"title":title})
+                     for title in ("Laptop","Phone")]
+            statuses=sorted(f.result()[0] for f in futures)
+        self.assertEqual(statuses,[200,409])
+        row=self.request("GET","/api/v1/tasks",self.owner)[1]["tasks"][0]
+        self.assertEqual(row["version"],2)
+        self.assertIn(row["title"],("Laptop","Phone"))
 
     def test_logout_and_security_headers(self):
         self.assertEqual(self.request("GET","/api/v1/calendars")[0],401)
