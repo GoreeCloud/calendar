@@ -937,6 +937,48 @@ class CalendarAPITests(unittest.TestCase):
         self.assertEqual(len(events),1)
         self.assertEqual(events[0]["title"],"Preview event")
 
+    def test_tasks_preflight_is_redacted_permissioned_and_non_mutating(self):
+        cid=self.calendar(self.owner)
+        body={"calendar_id":cid,"ics":(
+            "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nBEGIN:VTODO\r\n"
+            "UID:urn:uuid:aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa\r\n"
+            "DTSTAMP:20261111T120000Z\r\nSEQUENCE:3\r\n"
+            "CLASS:PRIVATE\r\nSTATUS:NEEDS-ACTION\r\n"
+            "SUMMARY:SENSITIVE-PRIVATE-TASK-TITLE\r\n"
+            "DUE;VALUE=DATE:20261112\r\n"
+            "END:VTODO\r\nEND:VCALENDAR\r\n")}
+        route="/api/v1/import-tasks.ics?dry_run=1&redact_titles=1&preflight=1"
+        status,report=self.request("POST",route,self.owner,body)
+        self.assertEqual(status,200)
+        self.assertEqual(report,{"importable":False,"reason_codes":[
+            "classification_not_supported","date_only_due_not_supported",
+            "sequence_not_supported"]})
+        self.assertNotIn("SENSITIVE",str(report))
+        self.assertNotIn("aaaaaaaa",str(report))
+        self.assertEqual(self.request("POST",route,self.other,body)[0],404)
+        self.assertEqual(self.request("POST",route,body=body)[0],401)
+        self.assertEqual(self.request("POST","/api/v1/import-tasks.ics",self.owner,body)[0],400)
+        self.assertEqual(self.request("GET","/api/v1/tasks",self.owner)[1]["tasks"],[])
+        for query in ("?preflight=1","?dry_run=1&preflight=1",
+                      "?redact_titles=1&preflight=1",
+                      "?dry_run=1&redact_titles=1&preflight=1&preflight=0",
+                      "?dry_run=1&redact_titles=1&preflight=",
+                      "?dry_run=1&redact_titles=1&preflight=invalid",
+                      "?dry_run=1&dry_run=0&redact_titles=1&preflight=1"):
+            self.assertEqual(self.request(
+                "POST","/api/v1/import-tasks.ics"+query,self.owner,body)[0],
+                400,query)
+        supported=dict(body,ics=(
+            "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nBEGIN:VTODO\r\n"
+            "UID:good@example.invalid\r\nSUMMARY:PRIVATE TITLE\r\n"
+            "END:VTODO\r\nEND:VCALENDAR\r\n"))
+        status,ok=self.request("POST",route,self.owner,supported)
+        self.assertEqual(status,200)
+        self.assertEqual(ok,{"importable":True,"reason_codes":[],
+                             "total":1,"would_import":1,"would_skip":0})
+        self.assertNotIn("PRIVATE TITLE",str(ok))
+        self.assertEqual(self.request("GET","/api/v1/tasks",self.owner)[1]["tasks"],[])
+
     def test_logout_and_security_headers(self):
         self.assertEqual(self.request("GET","/api/v1/calendars")[0],401)
         self.assertEqual(self.request("POST","/api/v1/register",body={})[0],401)

@@ -953,20 +953,31 @@ class CalendarHandler(BaseHTTPRequestHandler):
                     raise Failure(400,"Calendar and task ICS content required")
                 cid=_text(body["calendar_id"],"calendar_id",64,True)
                 self._accessible_calendar(db,user,cid,write=True)
-                from .vtodo import parse_tasks
+                from .vtodo import parse_tasks, task_importability_report
                 from .ical import ImportErrorCalendar
+                query_params=parse_qs(route.query,keep_blank_values=True)
+                dry_values=query_params.get("dry_run",["0"])
+                redact=query_params.get("redact_titles",["0"])
+                preflight=query_params.get("preflight",["0"])
+                if len(dry_values)!=1 or dry_values[0] not in ("0","1"):
+                    raise Failure(400,"Invalid dry-run parameter")
+                dry_run=dry_values[0]
+                if (len(redact)!=1 or redact[0] not in ("0","1") or
+                        (redact[0]=="1" and dry_run!="1")):
+                    raise Failure(400,"Invalid title-redaction parameter")
+                if (len(preflight)!=1 or preflight[0] not in ("0","1") or
+                        (preflight[0]=="1" and
+                         (dry_run!="1" or redact[0]!="1"))):
+                    raise Failure(400,"Invalid task preflight parameter")
+                report=None
+                if preflight[0]=="1":
+                    report=task_importability_report(body["ics"])
+                    if not report["importable"]:
+                        return self._send(200,report)
                 try:
                     tasks=parse_tasks(body["ics"])
                 except ImportErrorCalendar as error:
                     raise Failure(400,str(error)) from None
-                query_params=parse_qs(route.query,keep_blank_values=True)
-                dry_run=query_params.get("dry_run",["0"])[0]
-                redact=query_params.get("redact_titles",["0"])
-                if dry_run not in ("0","1"):
-                    raise Failure(400,"Invalid dry-run parameter")
-                if (len(redact)!=1 or redact[0] not in ("0","1") or
-                        (redact[0]=="1" and dry_run!="1")):
-                    raise Failure(400,"Invalid title-redaction parameter")
                 if dry_run=="1":
                     skipped=sum(db.execute("SELECT 1 FROM imported_task_uids "
                         "WHERE calendar_id=? AND external_uid=?",(cid,task["uid"])).fetchone()
@@ -975,6 +986,8 @@ class CalendarHandler(BaseHTTPRequestHandler):
                         "would_import":len(tasks)-skipped,"would_skip":skipped}
                     if redact[0]!="1":
                         preview["sample_titles"]=[task["title"] for task in tasks[:5]]
+                    if report is not None:
+                        preview.update(report)
                     return self._send(200,preview)
                 db.execute("BEGIN IMMEDIATE")
                 # Permission may have been revoked after content was parsed.
